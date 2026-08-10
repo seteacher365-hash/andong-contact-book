@@ -1508,7 +1508,7 @@
         </section>
         <section class="private-panel">
           <h2 class="private-heading">${escapeHtml(selectedTeacher.name)}・${weekdayName(selectedSchedule.day)}・${escapeHtml(selectedSchedule.slot)}・${escapeHtml(getScheduleDisplayTitle(selectedSchedule))}</h2>
-          <p style="margin:5px 0 0;color:var(--muted)">先填寫本節教學內容，再於下方填寫所選學生的每日功課與學習紀錄。</p>
+          <p style="margin:5px 0 0;color:var(--muted)">先填寫本節單元、教學內容與每日功課，再於下方填寫所選學生的學習表現與觀察紀錄。</p>
           <div class="days-grid" style="margin-top:14px">${cards}</div>
         </section>
         <details class="private-panel teacher-student-panel teacher-record-accordion" id="teacherStudentRecordsDetails" ${state.teacherStudentRecordsOpen ? 'open' : ''}>
@@ -1774,7 +1774,6 @@
               const record = (person.recordsByTeacher && person.recordsByTeacher[teacher.id] || []).find(item => item.date === day.date) || {};
               add(week, day.date, weekday, '個案紀錄', teacher.name, person.name, '學習表現勾選', (record.performanceTags || []).join('、'));
               add(week, day.date, weekday, '個案紀錄', teacher.name, person.name, '學習表現文字紀錄', record.learning || '');
-              add(week, day.date, weekday, '個案紀錄', teacher.name, person.name, '每日功課', record.homework || '');
               add(week, day.date, weekday, '個案紀錄', teacher.name, person.name, '特師觀察備註', record.teacherObservation || '');
             });
           });
@@ -2607,7 +2606,7 @@
               <div class="field"><label>其他教學項目</label><input class="input" data-bind="${path}.other" value="${escapeAttr(c.other)}" placeholder="例如：短文仿寫"></div>
             </div>
             <div class="field" style="margin-top:10px"><div class="field-label">國語教學內容</div>${renderCheckboxes(OPTIONS.chineseTopics, c.topics, `${path}.topics`)}</div>
-            <div class="field" style="margin-top:10px"><label>國語每日功課</label><textarea class="textarea" data-bind="${path}.homework" placeholder="例如：習作第 12～13 頁">${escapeHtml(c.homework)}</textarea></div>
+            <div class="field" style="margin-top:10px"><div class="homework-label-row"><label>國語每日功課</label>${renderQuickHomeworkControl(path)}</div><textarea class="textarea" data-bind="${path}.homework" placeholder="可留白，或使用右側的快速加入">${escapeHtml(c.homework)}</textarea></div>
           </div>
         </section>`;
     }
@@ -2623,7 +2622,7 @@
               <div class="field"><label>數學單元</label><input class="input" data-bind="${path}.unit" value="${escapeAttr(c.unit)}" placeholder="例如：第 3 單元 分數"></div>
               <div class="field"><label>數學教學內容</label><input class="input" data-bind="${path}.content" value="${escapeAttr(c.content)}" placeholder="例如：同分母分數加法"></div>
             </div>
-            <div class="field" style="margin-top:10px"><label>數學每日功課</label><textarea class="textarea" data-bind="${path}.homework" placeholder="例如：課本第 45 頁第 1～4 題">${escapeHtml(c.homework)}</textarea></div>
+            <div class="field" style="margin-top:10px"><div class="homework-label-row"><label>數學每日功課</label>${renderQuickHomeworkControl(path)}</div><textarea class="textarea" data-bind="${path}.homework" placeholder="可留白，或使用右側的快速加入">${escapeHtml(c.homework)}</textarea></div>
           </div>
         </section>`;
     }
@@ -2650,7 +2649,8 @@
             ${forceVisible ? '<span class="badge badge-green">本節已排課</span>' : `<label class="toggle"><input type="checkbox" data-bool="days.${index}.specialEnabled" ${day.specialEnabled ? 'checked' : ''}> 顯示本區</label>`}
           </div>
           ${visible ? `
-            <div class="field"><label>教學內容</label><textarea class="textarea large" data-bind="${path}.content" placeholder="填寫本節特殊需求課程教學內容">${escapeHtml(c.content)}</textarea></div>` : '<div class="empty-state">本區已隱藏</div>'}
+            <div class="field"><label>教學內容</label><textarea class="textarea large" data-bind="${path}.content" placeholder="填寫本節特殊需求課程教學內容">${escapeHtml(c.content)}</textarea></div>
+            <div class="field" style="margin-top:10px"><div class="homework-label-row"><label>每日功課</label>${renderQuickHomeworkControl(path)}</div><textarea class="textarea" data-bind="${path}.homework" placeholder="可留白，或使用右側的快速加入">${escapeHtml(c.homework)}</textarea></div>` : '<div class="empty-state">本區已隱藏</div>'}
         </section>`;
     }
 
@@ -2829,15 +2829,14 @@
 
     function hasRecordContent(record) {
       return Boolean(record && (
-        [record.learning, record.homework, record.teacherObservation].some(value => String(value || '').trim())
+        [record.learning, record.teacherObservation].some(value => String(value || '').trim())
         || (Array.isArray(record.performanceTags) && record.performanceTags.length)
       ));
     }
 
     function hasPublicRecordContent(record) {
       return Boolean(record && (
-        String(record.homework || '').trim()
-        || (Array.isArray(record.performanceTags) && record.performanceTags.length)
+        (Array.isArray(record.performanceTags) && record.performanceTags.length)
         || (record.showLearning && String(record.learning || '').trim())
         || (record.showTeacherObservation && String(record.teacherObservation || '').trim())
       ));
@@ -2863,7 +2862,6 @@
       const parts = [];
       if (tags.length) parts.push(`<div class="label">學習表現勾選</div><div class="chip-wrap">${tags.map(value => pill(value)).join('')}</div>`);
       if (item.showLearning && item.learning) parts.push(`<div class="label">學習表現文字紀錄</div>${textValue(item.learning)}`);
-      parts.push(`<div class="label">每日功課</div>${textValue(item.homework, '尚無功課紀錄')}`);
       if (item.showTeacherObservation && item.teacherObservation) parts.push(`<div class="label">特師觀察備註</div>${textValue(item.teacherObservation)}`);
       return parts.join('');
     }
@@ -2928,7 +2926,7 @@
           <input class="input" type="text" autocomplete="off" data-bind="individuals.${personIndex}.password" value="${escapeAttr(person.password)}" placeholder="請設定學生登入密碼">
           <p class="case-password-help">學生使用上方顯示名稱與此密碼登入，只能查看自己的聯絡簿，不能修改導師或家長留言。</p>
         </div>
-        <h2 class="private-section-title">${escapeHtml(teacher.name)}・每日學習紀錄與功課</h2>
+        <h2 class="private-section-title">${escapeHtml(teacher.name)}・每日學習紀錄</h2>
         <div class="detail-grid">${indexes.map(index => {
           const record = records[index] || { date: state.data.days[index].date, performanceTags:[], learning:'', showLearning:true, homework:'', teacherObservation:'', showTeacherObservation:false };
           const date = record.date ? parseISO(record.date) : null;
@@ -2941,7 +2939,6 @@
               <div class="performance-group"><div class="performance-group-title">學習完成情形</div>${renderCheckboxes(OPTIONS.learningPerformance, Array.isArray(record.performanceTags) ? record.performanceTags : [], `${path}.performanceTags`)}</div>
             </div>
             <div class="field" style="margin-top:9px"><label>學習表現文字紀錄</label><textarea class="textarea" data-bind="${path}.learning" placeholder="可依需要填寫">${escapeHtml(record.learning)}</textarea><label class="visibility-toggle"><input type="checkbox" data-bool="${path}.showLearning" ${record.showLearning ? 'checked' : ''}> 同步顯示於個案頁</label></div>
-            <div class="field" style="margin-top:9px"><div class="homework-label-row"><label>每日功課</label>${renderQuickHomeworkControl(path)}</div><textarea class="textarea" data-bind="${path}.homework" placeholder="可留白，或使用右側的快速加入">${escapeHtml(record.homework)}</textarea></div>
             <div class="field" style="margin-top:9px"><label>特師觀察備註</label><textarea class="textarea" data-bind="${path}.teacherObservation" placeholder="可依需要填寫課堂觀察">${escapeHtml(record.teacherObservation)}</textarea><label class="visibility-toggle"><input type="checkbox" data-bool="${path}.showTeacherObservation" ${record.showTeacherObservation ? 'checked' : ''}> 同步顯示於個案頁</label></div>
           </article>`;
         }).join('')}</div>
@@ -3243,6 +3240,8 @@
           <h3>🧩 特殊需求課程</h3>
           <div class="label">教學內容</div>
           ${textValue(s.content, '未填教學內容')}
+          <div class="label" style="margin-top:8px">每日功課</div>
+          ${textValue(s.homework, '今日無功課')}
         </section>`;
     }
 
