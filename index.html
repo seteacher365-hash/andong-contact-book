@@ -187,6 +187,19 @@
     .password-reset-card strong, .password-reset-card span { display: block; }
     .password-reset-card span { margin: 6px 0 10px; color: var(--muted); font-size: .82rem; line-height: 1.45; }
     .password-reset-result { margin-top: 8px !important; color: var(--primary) !important; font-weight: 900; overflow-wrap: anywhere; }
+    .teacher-record-accordion { margin-top: 18px; padding: 0; overflow: hidden; }
+    .teacher-record-accordion > summary {
+      display: flex; align-items: center; justify-content: space-between; gap: 14px;
+      padding: 18px 22px; cursor: pointer; list-style: none; user-select: none;
+    }
+    .teacher-record-accordion > summary::-webkit-details-marker { display: none; }
+    .teacher-record-accordion > summary::after { content: '＋'; flex: 0 0 auto; color: var(--muted); font-size: 1.35rem; font-weight: 900; }
+    .teacher-record-accordion[open] > summary { border-bottom: 1px solid var(--line); background: var(--primary-soft); }
+    .teacher-record-accordion[open] > summary::after { content: '−'; }
+    .teacher-record-summary-copy strong, .teacher-record-summary-copy span { display: block; }
+    .teacher-record-summary-copy strong { color: var(--primary); font-size: 1.13rem; }
+    .teacher-record-summary-copy span { margin-top: 4px; color: var(--muted); font-size: .84rem; font-weight: 650; }
+    .teacher-record-accordion-body { padding: 18px 22px 22px; }
     .teacher-sync-note {
       margin: 0 0 14px; padding: 11px 13px; border-radius: 13px;
       background: var(--blue-soft); color: #365f84; font-size: .9rem; font-weight: 800;
@@ -393,6 +406,28 @@
     }
     .term-card h4, .student-setting-card h4, .group-setting-card h4, .schedule-setting-card h4 { margin: 0 0 10px; }
     .student-setting-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 10px; }
+    .student-setting-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+    .student-setting-heading h4 { margin: 0; }
+    .icon-action {
+      width: 38px; height: 38px; display: inline-grid; place-items: center; flex: 0 0 auto;
+      border: 1px solid #b9d4cc; border-radius: 11px; background: #f2f8f5; color: var(--primary);
+      font-size: 1rem; cursor: pointer;
+    }
+    .icon-action:hover, .icon-action:focus-visible { border-color: var(--primary); background: #dfeee8; outline: 3px solid rgba(49,95,82,.13); }
+    .password-guidance { margin: 0 0 13px; padding: 11px 13px; border-radius: 12px; background: #f2f7f5; color: #456158; font-size: .86rem; line-height: 1.65; }
+    .student-password-backdrop {
+      position: fixed; inset: 0; z-index: 140; display: flex; align-items: center; justify-content: center;
+      padding: 18px; background: rgba(29,45,39,.58);
+    }
+    .student-password-backdrop[hidden] { display: none; }
+    .student-password-dialog {
+      width: min(620px, 100%); max-height: calc(100vh - 36px); overflow: auto;
+      border: 1px solid #b9d4cc; border-radius: 19px; padding: 20px; background: var(--paper);
+      box-shadow: 0 24px 80px rgba(20,40,33,.32);
+    }
+    .student-password-dialog-title { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+    .student-password-dialog-title h3 { margin: 2px 0 0; color: var(--primary); font-size: 1.25rem; }
+    .student-password-dialog > p { margin: 12px 0 0; color: var(--muted); line-height: 1.7; }
     .schedule-setting-list { display: grid; gap: 12px; }
     .student-check-grid { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 9px; }
     .student-check-grid label { display: inline-flex; align-items: center; gap: 5px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 9px; background: white; font-size: .84rem; }
@@ -1033,6 +1068,7 @@
       settingsScheduleId: '',
       settingsScheduleEditorOpen: false,
       settingsOpenSections: [],
+      teacherStudentRecordsOpen: false,
       settingsDirty: false,
       newTermDraft: { schoolYear:115, semester:2, startDate:'', weekCount:21 },
       quickHomeworkItems: [...DEFAULT_QUICK_HOMEWORK_ITEMS],
@@ -1475,22 +1511,28 @@
           <p style="margin:5px 0 0;color:var(--muted)">先填寫本節教學內容，再於下方填寫所選學生的每日功課與學習紀錄。</p>
           <div class="days-grid" style="margin-top:14px">${cards}</div>
         </section>
-        <section class="private-panel teacher-student-panel">
-          <h2 class="private-heading">${escapeHtml(selectedTeacher.name)}・本節個別學生紀錄</h2>
-          ${students.length ? `
-            <div class="private-toolbar" style="margin-top:12px">
-              <label class="field" style="min-width:min(360px,100%)">
-                <span class="field-label">選擇本節學生</span>
-                <select class="select" id="teacherStudentSelect">
-                  ${students.map(item => `<option value="${escapeAttr(item.id)}" ${selected.person.id === item.id ? 'selected' : ''}>${escapeHtml(item.name || item.id)}</option>`).join('')}
-                </select>
-              </label>
-            </div>` : ''}
-          ${studentEditor}
-        </section>`;
+        <details class="private-panel teacher-student-panel teacher-record-accordion" id="teacherStudentRecordsDetails" ${state.teacherStudentRecordsOpen ? 'open' : ''}>
+          <summary>
+            <span class="teacher-record-summary-copy">
+              <strong>${escapeHtml(selectedTeacher.name)}・本節個別學生紀錄</strong>
+              <span>${students.length ? `共 ${students.length} 位學生・點擊展開填寫` : '本節沒有排定學生'}</span>
+            </span>
+          </summary>
+          <div class="teacher-record-accordion-body">
+            ${students.length ? `
+              <div class="private-toolbar">
+                <label class="field" style="min-width:min(360px,100%)">
+                  <span class="field-label">選擇本節學生</span>
+                  <select class="select" id="teacherStudentSelect">
+                    ${students.map(item => `<option value="${escapeAttr(item.id)}" ${selected.person.id === item.id ? 'selected' : ''}>${escapeHtml(item.name || item.id)}</option>`).join('')}
+                  </select>
+                </label>
+              </div>` : ''}
+            ${studentEditor}
+          </div>
+        </details>`;
 
       bindDynamicInputs(els.content);
-      bindRolePasswordResetButtons(els.content);
       bindQuickHomeworkControls(els.content);
       els.content.querySelectorAll('[data-teacher-id]').forEach(button => {
         button.addEventListener('click', () => {
@@ -1516,6 +1558,10 @@
       if (studentSelect) studentSelect.addEventListener('change', event => {
         state.selectedIndividualId = event.target.value;
         renderAll();
+      });
+      const studentRecordsDetails = document.getElementById('teacherStudentRecordsDetails');
+      if (studentRecordsDetails) studentRecordsDetails.addEventListener('toggle', event => {
+        state.teacherStudentRecordsOpen = event.currentTarget.open;
       });
     }
 
@@ -1926,7 +1972,7 @@
         </div>
         <div class="field" style="margin-top:12px">
           <span class="field-label">快速依組別加入學生</span>
-          <div class="group-quick-add">${groups.length ? groups.map(group => `<button class="btn btn-soft" type="button" data-add-student-group="${escapeAttr(group.id)}">＋ ${escapeHtml(group.name)}</button>`).join('') : '<span class="format-note">請先在「共同學生名單與分組」建立組別。</span>'}</div>
+          <div class="group-quick-add">${groups.length ? groups.map(group => `<button class="btn btn-soft" type="button" data-add-student-group="${escapeAttr(group.id)}">＋ ${escapeHtml(group.name)}</button>`).join('') : '<span class="format-note">請先在「學生名單與分組」建立組別。</span>'}</div>
         </div>
         <div class="field" style="margin-top:12px"><span class="field-label">本節上課學生（仍可逐一增減）</span><div class="student-check-grid">${activeStudents.map(student => `<label><input type="checkbox" data-selected-schedule-student value="${escapeAttr(student.name)}" ${(entry.students || []).includes(student.name) ? 'checked' : ''}> ${escapeHtml(student.name)}</label>`).join('')}</div></div>
       </article></div>`;
@@ -1977,15 +2023,36 @@
         </details>
 
         <details class="settings-accordion" data-settings-section="roster" ${isSettingsSectionOpen('roster') ? 'open' : ''}>
-          <summary>共同學生名單與分組</summary>
+          <summary>學生名單與分組</summary>
           <div class="settings-accordion-body">
             <p>兩位老師共用學生與分組。學生帳號就是顯示名稱；修改學生登入密碼後，舊密碼會失效。學生畢業時取消「名單中啟用」，其學生、導師與家長帳號便無法再讀取資料。</p>
+            <div class="password-guidance">目前自訂密碼不會顯示給特教教師。忘記時可恢復預設密碼：導師為「T＋學生登入密碼」，家長為「P＋學生登入密碼」。請點學生姓名旁的鑰匙圖示開啟密碼管理。</div>
             <div class="student-setting-grid">${(draft.students || []).map((student, index) => `<article class="student-setting-card">
-              <h4>${escapeHtml(student.name || `學生 ${index + 1}`)}</h4>
+              <div class="student-setting-heading">
+                <h4>${escapeHtml(student.name || `學生 ${index + 1}`)}</h4>
+                <button class="icon-action" type="button" data-open-student-password-manager="${escapeAttr(student.id)}" aria-label="管理${escapeAttr(student.name || `學生 ${index + 1}`)}的導師與家長密碼" title="管理導師／家長密碼">🔑</button>
+              </div>
               <label class="field"><span class="field-label">顯示名稱</span><input class="input" data-student-index="${index}" data-student-field="name" value="${escapeAttr(student.name)}"></label>
               <label class="field" style="margin-top:8px"><span class="field-label">學生登入密碼（帳號同顯示名稱）</span><input class="input" data-student-index="${index}" data-student-field="password" value="${escapeAttr(student.password)}"></label>
               <label class="toggle" style="margin-top:10px"><input type="checkbox" data-student-index="${index}" data-student-active ${student.active !== false ? 'checked' : ''}> 名單中啟用</label>
             </article>`).join('')}</div>
+            ${(draft.students || []).map((student, index) => `<div class="student-password-backdrop" data-student-password-manager="${escapeAttr(student.id)}" hidden tabindex="-1">
+              <section class="student-password-dialog" role="dialog" aria-modal="true" aria-labelledby="studentPasswordTitle-${escapeAttr(student.id)}">
+                <div class="student-password-dialog-title">
+                  <div><div class="eyebrow">學生帳號設定</div><h3 id="studentPasswordTitle-${escapeAttr(student.id)}">${escapeHtml(student.name || `學生 ${index + 1}`)}・留言密碼管理</h3></div>
+                  <button class="icon-action" type="button" data-close-student-password-manager aria-label="關閉密碼管理">✕</button>
+                </div>
+                <p>目前自訂密碼不會顯示給特教教師。忘記時可恢復預設密碼：導師為「T＋學生登入密碼」，家長為「P＋學生登入密碼」。</p>
+                <div class="password-reset-grid">
+                  ${['homeroom','parent'].map(role => `<div class="password-reset-card">
+                    <strong>${escapeHtml(getIndividualRoleLabel(role))}密碼</strong>
+                    <span>目前自訂密碼：不顯示</span>
+                    <button class="btn btn-soft" type="button" data-reset-feedback-role="${role}" data-reset-person-id="${escapeAttr(student.id)}">恢復${escapeHtml(getIndividualRoleLabel(role))}預設密碼</button>
+                    <span class="password-reset-result" id="resetPasswordResult-${escapeAttr(student.id)}-${role}" hidden></span>
+                  </div>`).join('')}
+                </div>
+              </section>
+            </div>`).join('')}
             <button class="btn btn-soft" id="addStudentSettingBtn" type="button" style="margin-top:12px">＋ 新增學生</button>
 
             <h4 class="settings-subheading">學生分組</h4>
@@ -2028,6 +2095,7 @@
         </details>
         ${state.settingsScheduleEditorOpen ? renderSelectedScheduleEditor(selectedSchedule, activeStudents, groups) : ''}`;
       bindSettingsCenterEvents();
+      bindRolePasswordResetButtons(els.utilityContent);
     }
 
     function bindSettingsCenterEvents() {
@@ -2039,6 +2107,20 @@
         if (event.currentTarget.open) openSections.add(sectionId); else openSections.delete(sectionId);
         state.settingsOpenSections = Array.from(openSections);
       }));
+      root.querySelectorAll('[data-open-student-password-manager]').forEach(button => button.addEventListener('click', event => {
+        const modal = root.querySelector(`[data-student-password-manager="${CSS.escape(event.currentTarget.dataset.openStudentPasswordManager)}"]`);
+        if (!modal) return;
+        modal.hidden = false;
+        modal.focus();
+      }));
+      root.querySelectorAll('[data-close-student-password-manager]').forEach(button => button.addEventListener('click', event => {
+        const modal = event.currentTarget.closest('[data-student-password-manager]');
+        if (modal) modal.hidden = true;
+      }));
+      root.querySelectorAll('[data-student-password-manager]').forEach(modal => {
+        modal.addEventListener('click', event => { if (event.target === modal) modal.hidden = true; });
+        modal.addEventListener('keydown', event => { if (event.key === 'Escape') modal.hidden = true; });
+      });
       root.querySelectorAll('[data-term-field]').forEach(input => {
         const handler = event => {
           const term = state.settingsDraft.terms[Number(event.currentTarget.dataset.termIndex)];
@@ -2700,7 +2782,6 @@
         ${renderIndividualEditor(person, selected.index)}`;
 
       bindDynamicInputs(els.content);
-      bindRolePasswordResetButtons(els.content);
       bindQuickHomeworkControls(els.content);
       document.getElementById('individualSelect').addEventListener('change', event => {
         state.selectedIndividualId = event.target.value;
@@ -2846,16 +2927,6 @@
           <label>學生登入密碼（帳號為學生名稱；教師可直接查看與修改）</label>
           <input class="input" type="text" autocomplete="off" data-bind="individuals.${personIndex}.password" value="${escapeAttr(person.password)}" placeholder="請設定學生登入密碼">
           <p class="case-password-help">學生使用上方顯示名稱與此密碼登入，只能查看自己的聯絡簿，不能修改導師或家長留言。</p>
-        </div>
-        <h2 class="private-section-title">導師／家長留言密碼</h2>
-        <p style="margin:5px 0 0;color:var(--muted)">目前自訂密碼不會顯示給特教教師。忘記時可恢復預設密碼：導師為「T＋學生登入密碼」，家長為「P＋學生登入密碼」。</p>
-        <div class="password-reset-grid">
-          ${['homeroom','parent'].map(role => `<div class="password-reset-card">
-            <strong>${escapeHtml(getIndividualRoleLabel(role))}密碼</strong>
-            <span>目前密碼：不顯示</span>
-            <button class="btn btn-soft" type="button" data-reset-feedback-role="${role}" data-reset-person-id="${escapeAttr(person.id)}">恢復${escapeHtml(getIndividualRoleLabel(role))}預設密碼</button>
-            <span class="password-reset-result" id="resetPasswordResult-${escapeAttr(person.id)}-${role}" hidden></span>
-          </div>`).join('')}
         </div>
         <h2 class="private-section-title">${escapeHtml(teacher.name)}・每日學習紀錄與功課</h2>
         <div class="detail-grid">${indexes.map(index => {
@@ -3361,7 +3432,14 @@
           const role = button.dataset.resetFeedbackRole;
           const personId = button.dataset.resetPersonId;
           const person = getIndividualById(personId);
-          if (!person || !['homeroom','parent'].includes(role)) return;
+          if (!person || !['homeroom','parent'].includes(role)) {
+            showToast('請先儲存學生名單設定，再管理留言密碼。', true);
+            return;
+          }
+          if (state.settingsDirty) {
+            showToast('請先儲存學生名單設定，再恢復導師或家長預設密碼。', true);
+            return;
+          }
           const roleLabel = getIndividualRoleLabel(role);
           if (!confirm(`恢復預設後，目前的${roleLabel}自訂密碼會立即失效。確定要恢復嗎？`)) return;
           button.disabled = true;
