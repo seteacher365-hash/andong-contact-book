@@ -358,6 +358,27 @@
     .role-password-form { margin-top: 12px; border-top: 1px dashed #b9d4cc; padding-top: 12px; }
     .role-password-row { display: flex; gap: 8px; align-items: end; flex-wrap: wrap; }
     .role-password-row .field { flex: 1 1 220px; }
+    .comment-thread-note { margin: 0 0 10px; color: var(--muted); font-size: .84rem; font-weight: 700; }
+    .comment-thread {
+      display: grid; gap: 10px; max-height: 560px; overflow-y: auto;
+      padding: 2px 5px 2px 0; scrollbar-gutter: stable;
+    }
+    .comment-thread-message {
+      border: 1px solid var(--line); border-left: 5px solid #93aaa3;
+      border-radius: 14px; padding: 12px 13px; background: #fff;
+    }
+    .comment-thread-message.teacher { border-left-color: #4f8e7e; background: #f7fcfa; }
+    .comment-thread-message.homeroom { border-left-color: #5b8fc1; background: #f7fbff; }
+    .comment-thread-message.parent { border-left-color: #d18a45; background: #fffaf4; }
+    .comment-thread-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 7px; }
+    .comment-thread-meta strong { color: var(--ink); }
+    .comment-thread-role { padding: 3px 8px; border-radius: 999px; background: rgba(86,111,103,.1); color: var(--muted); font-size: .76rem; font-weight: 900; }
+    .comment-thread-time { margin-left: auto; color: var(--muted); font-size: .79rem; font-weight: 700; }
+    .comment-thread-content { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.65; }
+    .comment-compose { margin-top: 14px; border: 1px solid #b9d4cc; border-radius: 16px; padding: 15px; background: #f5fbf9; }
+    .comment-compose h3 { margin: 0; color: var(--primary); font-size: 1.04rem; }
+    .comment-compose p { margin: 5px 0 12px; color: var(--muted); font-size: .86rem; }
+    .comment-compose-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
 
     .empty-state {
       padding: 30px 20px; text-align: center; color: var(--muted);
@@ -603,6 +624,10 @@
       .schedule-color-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .teacher-record-accordion > summary { padding: 15px 16px; }
       .teacher-record-accordion-body { padding: 15px 16px 18px; }
+      .comment-thread { max-height: 52vh; }
+      .comment-thread-time { width: 100%; margin-left: 0; }
+      .comment-compose-actions { align-items: stretch; }
+      .comment-compose-actions .btn { flex: 1 1 100%; }
       .private-toolbar { align-items: stretch; }
       .private-toolbar .btn, .private-toolbar .badge { justify-content: center; }
       .input, .select, .btn, .page-tab, .day-tab, .check-chip span { min-height: 44px; }
@@ -738,6 +763,7 @@
     const APP_CONFIG_STORAGE_KEY = 'potential_contact_book_app_config_v2';
     const QUICK_HOMEWORK_STORAGE_KEY = 'potential_contact_book_quick_homework_items';
     const DEFAULT_QUICK_HOMEWORK_ITEMS = ['國語習作', '數學習作', '生字甲本', '生字乙本', '閱讀 20 分鐘', '訂正錯題'];
+    const COMMENT_ENTRY_PREFIX = '[[CONTACT_BOOK_MESSAGE_V1]]';
 
     const FIREBASE_CONFIG = {
       apiKey: 'AIzaSyBCO1H58izTSVtTYAUZTajGuRZpuqaish4',
@@ -1154,6 +1180,7 @@
       passwordIndividualId: '',
       dirty: false,
       feedbackDirty: false,
+      feedbackDraft: '',
       exportStartDate: DEFAULT_TERM_START,
       exportEndDate: addDaysISO(DEFAULT_TERM_START, 4),
       exportPeriodMode: 'semester',
@@ -1307,6 +1334,7 @@
         state.originalConfig = deepClone(state.appConfig);
         state.dirty = false;
         state.feedbackDirty = false;
+        state.feedbackDraft = '';
         state.loading = false;
         if (!keepTeacherEditing) state.editing = false;
         renderAll();
@@ -1371,6 +1399,7 @@
         state.individualPassword = '';
         state.individualRole = 'viewer';
         state.feedbackDirty = false;
+        state.feedbackDraft = '';
         state.pageMode = 'individuals';
         if (hadIndividualSession && firebaseReady) {
           await firebaseSignOutToPublic();
@@ -1382,6 +1411,7 @@
         state.individualPassword = '';
         state.individualRole = 'viewer';
         state.feedbackDirty = false;
+        state.feedbackDraft = '';
         state.pageMode = 'teacher';
         renderAll();
         openPasswordModal('teacher');
@@ -1630,6 +1660,7 @@
 
       bindDynamicInputs(els.content);
       bindQuickHomeworkControls(els.content);
+      bindCommentThreadControls(els.content);
       els.content.querySelectorAll('[data-teacher-id]').forEach(button => {
         button.addEventListener('click', () => {
           state.teacherId = button.dataset.teacherId;
@@ -1875,13 +1906,22 @@
           });
         });
         selectedPeople.forEach(person => {
-          TEACHERS.forEach(teacher => {
-            const comments = person.commentsByTeacher && person.commentsByTeacher[teacher.id] || {};
-            add(week, week.weekStart, '整週', '師長留言', teacher.name, person.name, '特教教師的話', comments.specialTeacher || '');
+          getIndividualCommentMessages(person, data.comments || {}).forEach(message => {
+            const messageDate = message.date || week.weekStart;
+            const parsedDate = parseISO(messageDate);
+            const dayIndex = Math.max(0, (parsedDate.getDay() + 6) % 7);
+            const timeLabel = message.createdAt ? formatCommentTimestamp(message) : '既有留言';
+            add(
+              week,
+              messageDate,
+              message.date ? weekdayName(dayIndex) : '整週',
+              '師長留言',
+              message.author || getCommentRoleLabel(message.role),
+              person.name,
+              `${getCommentRoleLabel(message.role)}｜${timeLabel}`,
+              message.content
+            );
           });
-          const family = person.familyFeedback || {};
-          add(week, week.weekStart, '整週', '師長留言', '導師', person.name, '導師的話', family.homeroom || '');
-          add(week, week.weekStart, '整週', '師長留言', '家長', person.name, '家長的話', family.parent || '');
         });
       });
       return rows;
@@ -2591,6 +2631,7 @@
         state.weeks = await callBackend('listWeeks');
         state.dirty = false;
         state.feedbackDirty = false;
+        state.feedbackDraft = '';
         closeUtility(true);
         await loadWeek(initialWeekStart(getActiveTerm()));
         showToast(`已刪除${label}的 ${starts.length} 週紀錄`);
@@ -2829,6 +2870,7 @@
         state.individualPassword = '';
         state.individualRole = 'viewer';
         state.feedbackDirty = false;
+        state.feedbackDraft = '';
         if (firebaseReady) await firebaseSignOutToPublic();
         else renderAll();
       });
@@ -2996,55 +3038,157 @@
       return { homeroom: String(source.homeroom || ''), parent: String(source.parent || ''), updatedAt: String(source.updatedAt || '') };
     }
 
+    function createCommentEntry(role, content, author, teacherId = '') {
+      const now = new Date();
+      return {
+        id: `msg-${now.getTime()}-${Math.random().toString(36).slice(2,8)}`,
+        role: String(role || ''),
+        author: String(author || ''),
+        teacherId: String(teacherId || ''),
+        createdAt: now.toISOString(),
+        date: toISO(now),
+        content: String(content || '').trim()
+      };
+    }
+
+    function appendCommentEntry(existing, entry) {
+      const current = String(existing || '').trim();
+      const serialized = COMMENT_ENTRY_PREFIX + JSON.stringify(entry || {});
+      return current ? current + '\n' + serialized : serialized;
+    }
+
+    function parseCommentEntries(value, defaults = {}) {
+      const source = String(value || '');
+      if (!source.trim()) return [];
+      const messages = [];
+      const legacyLines = [];
+      source.split(/\r?\n/).forEach(line => {
+        if (line.startsWith(COMMENT_ENTRY_PREFIX)) {
+          try {
+            const parsed = JSON.parse(line.slice(COMMENT_ENTRY_PREFIX.length));
+            const content = String(parsed && parsed.content || '').trim();
+            if (content) {
+              messages.push({
+                id: String(parsed.id || `msg-${messages.length + 1}`),
+                role: String(defaults.role || ''),
+                author: String(defaults.author || ''),
+                teacherId: String(defaults.teacherId || ''),
+                createdAt: String(parsed.createdAt || ''),
+                date: /^\d{4}-\d{2}-\d{2}$/.test(String(parsed.date || '')) ? String(parsed.date) : '',
+                content
+              });
+              return;
+            }
+          } catch (error) { /* 非系統格式時保留為既有留言 */ }
+        }
+        legacyLines.push(line);
+      });
+      const legacyContent = legacyLines.join('\n').trim();
+      if (legacyContent) {
+        messages.unshift({
+          id: `legacy-${defaults.role || 'message'}-${defaults.teacherId || 'general'}`,
+          role: String(defaults.role || ''),
+          author: String(defaults.author || ''),
+          teacherId: String(defaults.teacherId || ''),
+          createdAt: '',
+          date: '',
+          content: legacyContent,
+          legacy: true
+        });
+      }
+      return messages;
+    }
+
+    function getIndividualCommentMessages(person, fallbackComments = {}) {
+      const messages = [];
+      TEACHERS.forEach(teacher => {
+        const comments = getTeacherComments(person, teacher.id);
+        messages.push(...parseCommentEntries(comments.specialTeacher, {
+          role:'teacher', author:teacher.name, teacherId:teacher.id
+        }));
+      });
+      if (!messages.some(message => message.role === 'teacher')) {
+        messages.push(...parseCommentEntries(fallbackComments && fallbackComments.specialTeacher, {
+          role:'teacher', author:'特教教師', teacherId:'legacy'
+        }));
+      }
+      const family = getFamilyFeedback(person);
+      messages.push(...parseCommentEntries(family.homeroom, { role:'homeroom', author:'導師' }));
+      messages.push(...parseCommentEntries(family.parent, { role:'parent', author:'家長' }));
+      return messages.map((message, index) => ({ ...message, sequence:index })).sort((a,b) => {
+        const parsedATime = a.createdAt ? Date.parse(a.createdAt) : Number.NaN;
+        const parsedBTime = b.createdAt ? Date.parse(b.createdAt) : Number.NaN;
+        const aTime = Number.isNaN(parsedATime) ? Number.NEGATIVE_INFINITY : parsedATime;
+        const bTime = Number.isNaN(parsedBTime) ? Number.NEGATIVE_INFINITY : parsedBTime;
+        if (aTime !== bTime) return aTime - bTime;
+        return a.sequence - b.sequence;
+      });
+    }
+
+    function getCommentRoleLabel(role) {
+      return { teacher:'特教教師', homeroom:'導師', parent:'家長' }[role] || '師長';
+    }
+
+    function formatCommentTimestamp(message) {
+      if (!message || !message.createdAt) return '既有留言';
+      const date = new Date(message.createdAt);
+      if (Number.isNaN(date.getTime())) return message.date || '既有留言';
+      return new Intl.DateTimeFormat('zh-TW', {
+        month:'numeric', day:'numeric', weekday:'short', hour:'2-digit', minute:'2-digit', hour12:false
+      }).format(date);
+    }
+
+    function renderCommentThread(messages, emptyText = '本週尚無留言') {
+      if (!messages.length) return `<div class="empty-state">${escapeHtml(emptyText)}</div>`;
+      return `<p class="comment-thread-note">最新留言顯示在上方；每則留言都會保留日期、時間與身分。</p>
+        <div class="comment-thread">
+          ${[...messages].reverse().map(message => `
+            <article class="comment-thread-message ${escapeAttr(message.role)}">
+              <div class="comment-thread-meta">
+                <strong>${escapeHtml(message.author || getCommentRoleLabel(message.role))}</strong>
+                <span class="comment-thread-role">${escapeHtml(getCommentRoleLabel(message.role))}</span>
+                <span class="comment-thread-time">${escapeHtml(formatCommentTimestamp(message))}</span>
+              </div>
+              <div class="comment-thread-content">${escapeHtml(message.content)}</div>
+            </article>`).join('')}
+        </div>`;
+    }
+
     function renderIndividualComments(person, personIndex) {
       const fallback = state.data.comments || {};
       const family = getFamilyFeedback(person);
-      const specialItems = TEACHERS.map(teacher => {
-        const comments = getTeacherComments(person, teacher.id);
-        return { teacher, value: comments.specialTeacher || '' };
-      }).filter(item => String(item.value || '').trim());
-      if (!specialItems.length) specialItems.push({ teacher: { name: '特教教師' }, value: fallback.specialTeacher || '' });
+      const messages = getIndividualCommentMessages(person, fallback);
       const role = state.individualRole;
       const editableRole = role === 'homeroom' || role === 'parent' ? role : '';
       const editableLabel = getIndividualRoleLabel(editableRole);
-      const messageCount = specialItems.filter(item => String(item.value || '').trim()).length
-        + [family.homeroom, family.parent].filter(value => String(value || '').trim()).length;
+      const messageCount = messages.length;
       const messageSummary = messageCount
         ? `本週有 ${messageCount} 則留言・已自動展開`
-        : '本週尚無留言・點擊展開填寫或查看';
+        : '本週尚無留言・點擊展開新增或查看';
       return `<details class="comments-card teacher-record-accordion individual-comments-accordion" ${messageCount ? 'open' : ''}>
         <summary>
           <span class="teacher-record-summary-copy">
-            <strong>特教教師與師長留言</strong>
+            <strong>特教教師與師長留言串</strong>
             <span>${messageSummary}</span>
           </span>
         </summary>
         <div class="teacher-record-accordion-body">
-          <div class="comment-grid">${specialItems.map(item => `
-            <div class="comment-box"><h3>${escapeHtml(item.teacher.name)}・特教教師的話</h3>${textValue(item.value, '尚無留言')}</div>`).join('')}
-          </div>
-          <div class="feedback-form">
-            <h3>${editableRole ? `${escapeHtml(editableLabel)}留言區` : '導師與家長留言'}</h3>
-            <p>${editableRole ? `目前以${escapeHtml(editableLabel)}密碼登入，只能修改「${escapeHtml(editableLabel)}的話」；另一方留言為唯讀。` : '學生密碼只能查看留言；導師與家長需使用各自密碼登入後才能填寫。'}</p>
-            <div class="row">
-              ${role === 'homeroom'
-                ? `<div class="field"><label>導師的話</label><textarea class="textarea large" data-feedback-bind="individuals.${personIndex}.familyFeedback.homeroom" placeholder="填寫鼓勵、提醒或回饋">${escapeHtml(family.homeroom)}</textarea></div>`
-                : `<div class="comment-box"><h3>導師的話</h3>${textValue(family.homeroom, '尚無留言')}</div>`}
-              ${role === 'parent'
-                ? `<div class="field"><label>家長的話</label><textarea class="textarea large" data-feedback-bind="individuals.${personIndex}.familyFeedback.parent" placeholder="填寫回應或在家觀察">${escapeHtml(family.parent)}</textarea></div>`
-                : `<div class="comment-box"><h3>家長的話</h3>${textValue(family.parent, '尚無留言')}</div>`}
-            </div>
-            ${editableRole ? `<div class="feedback-actions">
+          ${renderCommentThread(messages)}
+          ${editableRole ? `<div class="comment-compose">
+            <h3>新增${escapeHtml(editableLabel)}留言</h3>
+            <p>每次新增都會保留原留言，並自動標示日期與時間。</p>
+            <textarea class="textarea large" data-feedback-draft maxlength="2000" placeholder="輸入本次想新增的留言">${escapeHtml(state.feedbackDraft)}</textarea>
+            <div class="comment-compose-actions">
               <span class="badge ${state.feedbackDirty ? 'badge-orange' : 'badge-green'}" id="feedbackStatus">${state.feedbackDirty ? '留言尚未儲存' : (family.updatedAt ? '留言已儲存' : '尚未填寫留言')}</span>
-              <button class="btn btn-primary" id="saveIndividualFeedbackBtn" type="button" ${state.feedbackDirty ? '' : 'disabled'}>儲存${escapeHtml(editableLabel)}留言</button>
+              <button class="btn btn-primary" id="saveIndividualFeedbackBtn" type="button" ${state.feedbackDirty ? '' : 'disabled'}>新增${escapeHtml(editableLabel)}留言</button>
             </div>
             <div class="role-password-form">
               <div class="role-password-row">
                 <label class="field"><span class="field-label">自訂新的${escapeHtml(editableLabel)}密碼</span><input class="input" id="roleNewPassword" type="password" minlength="4" autocomplete="new-password" placeholder="至少 4 個字元"></label>
                 <button class="btn btn-soft" id="changeFeedbackPasswordBtn" type="button">變更我的密碼</button>
               </div>
-            </div>` : ''}
-          </div>
+            </div>
+          </div>` : `<div class="feedback-form"><h3>留言權限</h3><p>學生密碼可查看完整留言串；導師與家長使用各自密碼登入後，即可新增自己的留言。</p></div>`}
         </div>
       </details>`;
     }
@@ -3053,8 +3197,7 @@
       const teacher = getTeacher(state.teacherId);
       const records = getTeacherRecords(person, teacher.id);
       const indexes = Array.isArray(recordIndexes) && recordIndexes.length ? recordIndexes : records.map((_, index) => index);
-      const c = getTeacherComments(person, teacher.id);
-      const family = getFamilyFeedback(person);
+      const messages = getIndividualCommentMessages(person, state.data.comments || {});
       return `<section class="private-panel">
         <div class="eyebrow">個案資料僅供密碼頁閱覽・目前編輯：${escapeHtml(teacher.name)}</div>
         <div class="case-account-grid">
@@ -3085,11 +3228,16 @@
             </div>
           </article>`;
         }).join('')}</div>
-        <h2 class="private-section-title">${escapeHtml(teacher.name)}・特教教師與師長留言</h2>
-        <div class="comment-grid">
-          <div class="field"><label>特教教師的話</label><textarea class="textarea large" data-bind="individuals.${personIndex}.commentsByTeacher.${teacher.id}.specialTeacher">${escapeHtml(c.specialTeacher)}</textarea></div>
-          <div class="comment-box"><h3>導師的話（同步顯示）</h3>${textValue(family.homeroom, '尚無留言')}</div>
-          <div class="comment-box"><h3>家長的話（同步顯示）</h3>${textValue(family.parent, '尚無留言')}</div>
+        <h2 class="private-section-title">${escapeHtml(teacher.name)}・每週留言串</h2>
+        ${renderCommentThread(messages)}
+        <div class="comment-compose">
+          <h3>新增${escapeHtml(teacher.name)}留言</h3>
+          <p>加入後會列入本週修改；請再按頁面下方「儲存本週」，才會同步到學生頁。</p>
+          <textarea class="textarea large" data-teacher-comment-draft maxlength="2000" placeholder="輸入本次想新增的留言"></textarea>
+          <div class="comment-compose-actions">
+            <span class="badge badge-orange">加入後請儲存本週</span>
+            <button class="btn btn-primary" type="button" data-add-teacher-comment data-person-index="${personIndex}" data-teacher-id="${escapeAttr(teacher.id)}">加入留言串</button>
+          </div>
         </div>
       </section>`;
     }
@@ -3500,23 +3648,55 @@
     }
 
     function bindIndividualFeedbackInputs(root) {
-      const inputs = root.querySelectorAll('[data-feedback-bind]');
+      const input = root.querySelector('[data-feedback-draft]');
       const saveButton = document.getElementById('saveIndividualFeedbackBtn');
       const status = document.getElementById('feedbackStatus');
-      inputs.forEach(input => {
-        input.addEventListener('input', event => {
-          setPath(state.data, event.currentTarget.dataset.feedbackBind, event.currentTarget.value);
-          state.feedbackDirty = true;
-          if (saveButton) saveButton.disabled = false;
-          if (status) {
-            status.textContent = '留言尚未儲存';
-            status.className = 'badge badge-orange';
-          }
-        });
+      if (input) input.addEventListener('input', event => {
+        state.feedbackDraft = event.currentTarget.value;
+        state.feedbackDirty = Boolean(state.feedbackDraft.trim());
+        if (saveButton) saveButton.disabled = !state.feedbackDirty;
+        if (status) {
+          status.textContent = state.feedbackDirty ? '留言尚未儲存' : '請先輸入留言';
+          status.className = `badge ${state.feedbackDirty ? 'badge-orange' : 'badge-green'}`;
+        }
       });
       if (saveButton) saveButton.addEventListener('click', saveIndividualFeedback);
       const changePasswordButton = document.getElementById('changeFeedbackPasswordBtn');
       if (changePasswordButton) changePasswordButton.addEventListener('click', changeOwnFeedbackPassword);
+    }
+
+    function bindCommentThreadControls(root) {
+      root.querySelectorAll('[data-add-teacher-comment]').forEach(button => {
+        button.addEventListener('click', () => {
+          const composer = button.closest('.comment-compose');
+          const input = composer ? composer.querySelector('[data-teacher-comment-draft]') : null;
+          const content = String(input ? input.value : '').trim();
+          if (!content) {
+            showToast('請先輸入留言內容', true);
+            if (input) input.focus();
+            return;
+          }
+          const personIndex = Number(button.dataset.personIndex);
+          const teacherId = String(button.dataset.teacherId || '');
+          const person = state.data.individuals[personIndex];
+          const teacher = TEACHERS.find(item => item.id === teacherId);
+          if (!person || !teacher) {
+            showToast('找不到目前的教師或學生資料', true);
+            return;
+          }
+          const comments = getTeacherComments(person, teacherId);
+          const entry = createCommentEntry('teacher', content, teacher.name, teacherId);
+          setPath(
+            state.data,
+            `individuals.${personIndex}.commentsByTeacher.${teacherId}.specialTeacher`,
+            appendCommentEntry(comments.specialTeacher, entry)
+          );
+          state.teacherStudentRecordsOpen = true;
+          markDirty();
+          renderAll();
+          showToast('留言已加入；請再按「儲存本週」完成同步');
+        });
+      });
     }
 
     function bindQuickHomeworkControls(root) {
@@ -3651,6 +3831,7 @@
           state.individualPassword = password;
           state.individualRole = result.role || 'viewer';
           state.feedbackDirty = false;
+          state.feedbackDraft = '';
           state.pageMode = 'individuals';
           await loadWeek(state.weekStart);
         } else {
@@ -3690,9 +3871,10 @@
       try {
         const role = state.individualRole;
         if (!['homeroom','parent'].includes(role)) throw new Error('目前帳號沒有留言權限。');
-        const feedback = getFamilyFeedback(person);
+        const content = String(state.feedbackDraft || '').trim();
+        if (!content) throw new Error('請先輸入留言內容。');
         const result = await callBackend(
-          'saveIndividualFeedback', state.individualPassword, person.id, state.weekStart, role, feedback[role]
+          'saveIndividualFeedback', state.individualPassword, person.id, state.weekStart, role, content
         );
         state.data = normalizeClientData(result.data || state.data, state.weekStart);
         state.data.updatedAt = result.updatedAt || state.data.updatedAt;
@@ -3701,14 +3883,15 @@
         persistAppConfig();
         state.weeks = Array.isArray(result.weeks) ? result.weeks : state.weeks;
         state.feedbackDirty = false;
+        state.feedbackDraft = '';
         renderAll();
-        showToast(isCloudStorage() ? `${getIndividualRoleLabel(role)}留言已儲存到雲端` : `${getIndividualRoleLabel(role)}留言已儲存在此瀏覽器`);
+        showToast(isCloudStorage() ? `${getIndividualRoleLabel(role)}留言已新增到雲端` : `${getIndividualRoleLabel(role)}留言已新增到此瀏覽器`);
       } catch (error) {
         console.error(error);
         showToast(error.message || '師長留言儲存失敗', true);
         if (button) {
           button.disabled = false;
-          button.textContent = '儲存師長留言';
+          button.textContent = `新增${getIndividualRoleLabel(state.individualRole)}留言`;
         }
       }
     }
@@ -3793,6 +3976,7 @@
       state.dirty = false;
       state.settingsDirty = false;
       state.feedbackDirty = false;
+      state.feedbackDraft = '';
       state.pageMode = 'individuals';
       state.unlockedIndividualId = '';
       if (els.utilityModal.classList.contains('show')) closeUtility(true);
@@ -4243,6 +4427,7 @@
           setDoc: storeModule.setDoc,
           deleteDoc: storeModule.deleteDoc,
           writeBatch: storeModule.writeBatch,
+          runTransaction: storeModule.runTransaction,
           query: storeModule.query,
           orderBy: storeModule.orderBy,
           where: storeModule.where
@@ -4679,20 +4864,27 @@
       }
       const target = weekStartMonday(weekStart);
       const updatedAt = firebaseTimestamp();
+      const content = String(value || '').trim();
+      if (!content) throw new Error('請先輸入留言內容。');
       const reference = firebaseApi.doc(
         firebaseDb, FIREBASE_COLLECTIONS.comments, firebaseWeekDocumentId(studentId, target)
       );
-      const existing = await firebaseApi.getDoc(reference);
-      const payload = existing.exists()
-        ? { [role]:String(value || ''), updatedAt }
-        : {
-            studentId,
-            weekStart:target,
-            homeroom:role === 'homeroom' ? String(value || '') : '',
-            parent:role === 'parent' ? String(value || '') : '',
-            updatedAt
-          };
-      await firebaseApi.setDoc(reference, payload, { merge:true });
+      await firebaseApi.runTransaction(firebaseDb, async transaction => {
+        const existing = await transaction.get(reference);
+        const current = existing.exists() ? String(existing.data()[role] || '') : '';
+        const entry = createCommentEntry(role, content, getIndividualRoleLabel(role));
+        const nextValue = appendCommentEntry(current, entry);
+        const payload = existing.exists()
+          ? { [role]:nextValue, updatedAt }
+          : {
+              studentId,
+              weekStart:target,
+              homeroom:role === 'homeroom' ? nextValue : '',
+              parent:role === 'parent' ? nextValue : '',
+              updatedAt
+            };
+        transaction.set(reference, payload, { merge:true });
+      });
       return {
         ok:true,
         updatedAt,
@@ -4934,14 +5126,19 @@
         const id = String(args[1] || '');
         const weekStart = weekStartMonday(args[2] || initialWeekStart());
         const role = String(args[3] || '');
-        const value = String(args[4] || '');
+        const value = String(args[4] || '').trim();
+        if (!['homeroom','parent'].includes(role)) throw new Error('目前帳號沒有此留言權限。');
+        if (!value) throw new Error('請先輸入留言內容。');
         const raw = storage.getItem(prefix + 'week_' + weekStart);
         const data = normalizeClientData(raw ? JSON.parse(raw) : createEmptyWeekClient(weekStart), weekStart);
         const person = data.individuals.find(item => item.id === id);
         if (!person || !await verifyRolePassword(person, role, password)) throw new Error('留言密碼已失效，請重新登入。');
         const updatedAt = new Intl.DateTimeFormat('zh-TW', { dateStyle:'short', timeStyle:'medium', hour12:false }).format(new Date());
         const family = getFamilyFeedback(person);
-        family[role] = value;
+        family[role] = appendCommentEntry(
+          family[role],
+          createCommentEntry(role, value, getIndividualRoleLabel(role))
+        );
         family.updatedAt = updatedAt;
         person.familyFeedback = family;
         data.updatedAt = updatedAt;
