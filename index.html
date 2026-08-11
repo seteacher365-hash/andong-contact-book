@@ -3958,7 +3958,7 @@
             showToast('只能刪除自己新增的留言', true);
             return;
           }
-          if (!confirm('刪除後，學生、導師與家長將看不到這則留言；特教教師端仍會保留刪除紀錄。確定刪除嗎？')) return;
+          if (!confirm('確定要刪除這則留言嗎？')) return;
           const edit = {
             context:target.context,
             personIndex:target.personIndex,
