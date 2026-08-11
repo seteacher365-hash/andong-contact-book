@@ -202,7 +202,11 @@
     .teacher-record-summary-copy strong { color: var(--primary); font-size: 1.13rem; }
     .teacher-record-summary-copy span { margin-top: 4px; color: var(--muted); font-size: .84rem; font-weight: 650; }
     .teacher-record-accordion-body { padding: 18px 22px 22px; }
-    .private-panel.individual-record-accordion { padding: 0; }
+    .private-panel.individual-record-accordion,
+    .private-panel.student-schedule-accordion,
+    .comments-card.individual-comments-accordion { padding: 0; }
+    .student-schedule-accordion { margin-top: 0; }
+    .student-schedule-accordion .student-schedule-grid { margin-top: 0; }
     .teacher-sync-note {
       margin: 0 0 14px; padding: 11px 13px; border-radius: 13px;
       background: var(--blue-soft); color: #365f84; font-size: .9rem; font-weight: 800;
@@ -2832,17 +2836,25 @@
 
     function renderStudentSchedule(person) {
       const entries = getStudentSchedule(person.name);
-      return `<section class="private-panel">
-        <h2 class="private-heading">${escapeHtml(person.name)}・每週固定課表</h2>
-        <div class="student-schedule-grid">
-          ${[0,1,2,3,4].map(dayIndex => {
-            const dayEntries = entries.filter(item => item.day === dayIndex);
-            return `<article class="student-schedule-day"><h3>${weekdayName(dayIndex)}</h3>
-              ${dayEntries.length ? dayEntries.map(item => `<div class="student-schedule-item"><strong>${escapeHtml(item.slot)}・${escapeHtml(getScheduleDisplayTitle(item))}</strong><br>${escapeHtml(item.time)}${item.time ? '｜' : ''}${escapeHtml(getTeacher(item.teacherId).name)}</div>`).join('') : '<div class="value empty">無排定潛能班課程</div>'}
-            </article>`;
-          }).join('')}
+      const scheduleSummary = entries.length ? `共 ${entries.length} 個課程時段・點擊展開查看` : '目前無排定潛能班課程・點擊展開查看';
+      return `<details class="private-panel teacher-record-accordion student-schedule-accordion">
+        <summary>
+          <span class="teacher-record-summary-copy">
+            <strong>每週固定課表</strong>
+            <span>${escapeHtml(person.name || '未命名個案')}・${scheduleSummary}</span>
+          </span>
+        </summary>
+        <div class="teacher-record-accordion-body">
+          <div class="student-schedule-grid">
+            ${[0,1,2,3,4].map(dayIndex => {
+              const dayEntries = entries.filter(item => item.day === dayIndex);
+              return `<article class="student-schedule-day"><h3>${weekdayName(dayIndex)}</h3>
+                ${dayEntries.length ? dayEntries.map(item => `<div class="student-schedule-item"><strong>${escapeHtml(item.slot)}・${escapeHtml(getScheduleDisplayTitle(item))}</strong><br>${escapeHtml(item.time)}${item.time ? '｜' : ''}${escapeHtml(getTeacher(item.teacherId).name)}</div>`).join('') : '<div class="value empty">無排定潛能班課程</div>'}
+              </article>`;
+            }).join('')}
+          </div>
         </div>
-      </section>`;
+      </details>`;
     }
 
     function getIndividuals() {
@@ -2990,39 +3002,51 @@
       const specialItems = TEACHERS.map(teacher => {
         const comments = getTeacherComments(person, teacher.id);
         return { teacher, value: comments.specialTeacher || '' };
-      }).filter(item => item.value);
+      }).filter(item => String(item.value || '').trim());
       if (!specialItems.length) specialItems.push({ teacher: { name: '特教教師' }, value: fallback.specialTeacher || '' });
       const role = state.individualRole;
       const editableRole = role === 'homeroom' || role === 'parent' ? role : '';
       const editableLabel = getIndividualRoleLabel(editableRole);
-      return `<section class="comments-card">
-        <h2>💬 特教教師與師長留言</h2>
-        <div class="comment-grid">${specialItems.map(item => `
-          <div class="comment-box"><h3>${escapeHtml(item.teacher.name)}・特教教師的話</h3>${textValue(item.value, '尚無留言')}</div>`).join('')}
-        </div>
-        <div class="feedback-form">
-          <h3>${editableRole ? `${escapeHtml(editableLabel)}留言區` : '導師與家長留言'}</h3>
-          <p>${editableRole ? `目前以${escapeHtml(editableLabel)}密碼登入，只能修改「${escapeHtml(editableLabel)}的話」；另一方留言為唯讀。` : '學生密碼只能查看留言；導師與家長需使用各自密碼登入後才能填寫。'}</p>
-          <div class="row">
-            ${role === 'homeroom'
-              ? `<div class="field"><label>導師的話</label><textarea class="textarea large" data-feedback-bind="individuals.${personIndex}.familyFeedback.homeroom" placeholder="填寫鼓勵、提醒或回饋">${escapeHtml(family.homeroom)}</textarea></div>`
-              : `<div class="comment-box"><h3>導師的話</h3>${textValue(family.homeroom, '尚無留言')}</div>`}
-            ${role === 'parent'
-              ? `<div class="field"><label>家長的話</label><textarea class="textarea large" data-feedback-bind="individuals.${personIndex}.familyFeedback.parent" placeholder="填寫回應或在家觀察">${escapeHtml(family.parent)}</textarea></div>`
-              : `<div class="comment-box"><h3>家長的話</h3>${textValue(family.parent, '尚無留言')}</div>`}
+      const messageCount = specialItems.filter(item => String(item.value || '').trim()).length
+        + [family.homeroom, family.parent].filter(value => String(value || '').trim()).length;
+      const messageSummary = messageCount
+        ? `本週有 ${messageCount} 則留言・已自動展開`
+        : '本週尚無留言・點擊展開填寫或查看';
+      return `<details class="comments-card teacher-record-accordion individual-comments-accordion" ${messageCount ? 'open' : ''}>
+        <summary>
+          <span class="teacher-record-summary-copy">
+            <strong>特教教師與師長留言</strong>
+            <span>${messageSummary}</span>
+          </span>
+        </summary>
+        <div class="teacher-record-accordion-body">
+          <div class="comment-grid">${specialItems.map(item => `
+            <div class="comment-box"><h3>${escapeHtml(item.teacher.name)}・特教教師的話</h3>${textValue(item.value, '尚無留言')}</div>`).join('')}
           </div>
-          ${editableRole ? `<div class="feedback-actions">
-            <span class="badge ${state.feedbackDirty ? 'badge-orange' : 'badge-green'}" id="feedbackStatus">${state.feedbackDirty ? '留言尚未儲存' : (family.updatedAt ? '留言已儲存' : '尚未填寫留言')}</span>
-            <button class="btn btn-primary" id="saveIndividualFeedbackBtn" type="button" ${state.feedbackDirty ? '' : 'disabled'}>儲存${escapeHtml(editableLabel)}留言</button>
-          </div>
-          <div class="role-password-form">
-            <div class="role-password-row">
-              <label class="field"><span class="field-label">自訂新的${escapeHtml(editableLabel)}密碼</span><input class="input" id="roleNewPassword" type="password" minlength="4" autocomplete="new-password" placeholder="至少 4 個字元"></label>
-              <button class="btn btn-soft" id="changeFeedbackPasswordBtn" type="button">變更我的密碼</button>
+          <div class="feedback-form">
+            <h3>${editableRole ? `${escapeHtml(editableLabel)}留言區` : '導師與家長留言'}</h3>
+            <p>${editableRole ? `目前以${escapeHtml(editableLabel)}密碼登入，只能修改「${escapeHtml(editableLabel)}的話」；另一方留言為唯讀。` : '學生密碼只能查看留言；導師與家長需使用各自密碼登入後才能填寫。'}</p>
+            <div class="row">
+              ${role === 'homeroom'
+                ? `<div class="field"><label>導師的話</label><textarea class="textarea large" data-feedback-bind="individuals.${personIndex}.familyFeedback.homeroom" placeholder="填寫鼓勵、提醒或回饋">${escapeHtml(family.homeroom)}</textarea></div>`
+                : `<div class="comment-box"><h3>導師的話</h3>${textValue(family.homeroom, '尚無留言')}</div>`}
+              ${role === 'parent'
+                ? `<div class="field"><label>家長的話</label><textarea class="textarea large" data-feedback-bind="individuals.${personIndex}.familyFeedback.parent" placeholder="填寫回應或在家觀察">${escapeHtml(family.parent)}</textarea></div>`
+                : `<div class="comment-box"><h3>家長的話</h3>${textValue(family.parent, '尚無留言')}</div>`}
             </div>
-          </div>` : ''}
+            ${editableRole ? `<div class="feedback-actions">
+              <span class="badge ${state.feedbackDirty ? 'badge-orange' : 'badge-green'}" id="feedbackStatus">${state.feedbackDirty ? '留言尚未儲存' : (family.updatedAt ? '留言已儲存' : '尚未填寫留言')}</span>
+              <button class="btn btn-primary" id="saveIndividualFeedbackBtn" type="button" ${state.feedbackDirty ? '' : 'disabled'}>儲存${escapeHtml(editableLabel)}留言</button>
+            </div>
+            <div class="role-password-form">
+              <div class="role-password-row">
+                <label class="field"><span class="field-label">自訂新的${escapeHtml(editableLabel)}密碼</span><input class="input" id="roleNewPassword" type="password" minlength="4" autocomplete="new-password" placeholder="至少 4 個字元"></label>
+                <button class="btn btn-soft" id="changeFeedbackPasswordBtn" type="button">變更我的密碼</button>
+              </div>
+            </div>` : ''}
+          </div>
         </div>
-      </section>`;
+      </details>`;
     }
 
     function renderIndividualEditor(person, personIndex, recordIndexes = null) {
