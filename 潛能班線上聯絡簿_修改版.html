@@ -370,11 +370,24 @@
     .comment-thread-message.teacher { border-left-color: #4f8e7e; background: #f7fcfa; }
     .comment-thread-message.homeroom { border-left-color: #5b8fc1; background: #f7fbff; }
     .comment-thread-message.parent { border-left-color: #d18a45; background: #fffaf4; }
+    .comment-thread-message.is-deleted { border-style: dashed; border-left-style: solid; background: #f5f5f3; color: #6d746f; }
     .comment-thread-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 7px; }
     .comment-thread-meta strong { color: var(--ink); }
     .comment-thread-role { padding: 3px 8px; border-radius: 999px; background: rgba(86,111,103,.1); color: var(--muted); font-size: .76rem; font-weight: 900; }
     .comment-thread-time { margin-left: auto; color: var(--muted); font-size: .79rem; font-weight: 700; }
     .comment-thread-content { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.65; }
+    .comment-thread-message.is-deleted .comment-thread-content { color: #686f6b; }
+    .comment-message-actions { display: flex; justify-content: flex-end; gap: 7px; margin-top: 10px; flex-wrap: wrap; }
+    .comment-message-actions .btn { min-height: 36px; padding: 7px 10px; font-size: .82rem; }
+    .comment-edit-form { margin-top: 11px; padding-top: 11px; border-top: 1px dashed var(--line); }
+    .comment-edit-form .textarea { min-height: 105px; }
+    .comment-audit-history { margin-top: 10px; border-top: 1px dashed #c9d4d0; padding-top: 9px; }
+    .comment-audit-history > summary { color: var(--primary); cursor: pointer; font-size: .82rem; font-weight: 900; }
+    .comment-audit-list { display: grid; gap: 8px; margin: 9px 0 0; padding: 0; list-style: none; }
+    .comment-audit-event { border-radius: 10px; padding: 9px 10px; background: rgba(255,255,255,.72); border: 1px solid #d9e1de; }
+    .comment-audit-event strong, .comment-audit-event span { display: block; }
+    .comment-audit-event span { margin-top: 3px; color: var(--muted); font-size: .76rem; }
+    .comment-audit-event div { margin-top: 6px; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.55; }
     .comment-compose { margin-top: 14px; border: 1px solid #b9d4cc; border-radius: 16px; padding: 15px; background: #f5fbf9; }
     .comment-compose h3 { margin: 0; color: var(--primary); font-size: 1.04rem; }
     .comment-compose p { margin: 5px 0 12px; color: var(--muted); font-size: .86rem; }
@@ -628,6 +641,8 @@
       .comment-thread-time { width: 100%; margin-left: 0; }
       .comment-compose-actions { align-items: stretch; }
       .comment-compose-actions .btn { flex: 1 1 100%; }
+      .comment-message-actions { align-items: stretch; }
+      .comment-message-actions .btn { flex: 1 1 calc(50% - 4px); }
       .private-toolbar { align-items: stretch; }
       .private-toolbar .btn, .private-toolbar .badge { justify-content: center; }
       .input, .select, .btn, .page-tab, .day-tab, .check-chip span { min-height: 44px; }
@@ -1181,6 +1196,7 @@
       dirty: false,
       feedbackDirty: false,
       feedbackDraft: '',
+      commentEdit: null,
       exportStartDate: DEFAULT_TERM_START,
       exportEndDate: addDaysISO(DEFAULT_TERM_START, 4),
       exportPeriodMode: 'semester',
@@ -1268,7 +1284,7 @@
       });
       els.passwordForm.addEventListener('submit', handleLogin);
       window.addEventListener('beforeunload', event => {
-        if (!state.dirty && !state.feedbackDirty && !state.settingsDirty) return;
+        if (!state.dirty && !state.feedbackDirty && !state.commentEdit && !state.settingsDirty) return;
         event.preventDefault();
         event.returnValue = '';
       });
@@ -1300,7 +1316,7 @@
     }
 
     async function loadWeek(weekStart, bootstrap = false) {
-      const hasUnsaved = state.dirty || state.feedbackDirty || state.settingsDirty;
+      const hasUnsaved = state.dirty || state.feedbackDirty || Boolean(state.commentEdit) || state.settingsDirty;
       if (hasUnsaved && !confirm('目前有尚未儲存的修改，確定要離開嗎？')) return;
       if (hasUnsaved && state.originalConfig) state.appConfig = deepClone(state.originalConfig);
       state.settingsDirty = false;
@@ -1335,6 +1351,7 @@
         state.dirty = false;
         state.feedbackDirty = false;
         state.feedbackDraft = '';
+        state.commentEdit = null;
         state.loading = false;
         if (!keepTeacherEditing) state.editing = false;
         renderAll();
@@ -1393,13 +1410,14 @@
     async function setPageMode(mode) {
       if (mode === 'groups') mode = 'individuals';
       if (mode === 'individuals' && !state.editing) {
-        if (state.feedbackDirty && !confirm('導師或家長留言尚未儲存，確定返回個案名單嗎？')) return;
+        if ((state.feedbackDirty || state.commentEdit) && !confirm('導師或家長留言尚未儲存，確定返回個案名單嗎？')) return;
         const hadIndividualSession = Boolean(state.unlockedIndividualId);
         state.unlockedIndividualId = '';
         state.individualPassword = '';
         state.individualRole = 'viewer';
         state.feedbackDirty = false;
         state.feedbackDraft = '';
+        state.commentEdit = null;
         state.pageMode = 'individuals';
         if (hadIndividualSession && firebaseReady) {
           await firebaseSignOutToPublic();
@@ -1407,11 +1425,12 @@
         }
       }
       if (mode === 'teacher' && !state.editing) {
-        if (state.feedbackDirty && !confirm('導師或家長留言尚未儲存，確定離開個案頁嗎？')) return;
+        if ((state.feedbackDirty || state.commentEdit) && !confirm('導師或家長留言尚未儲存，確定離開個案頁嗎？')) return;
         state.individualPassword = '';
         state.individualRole = 'viewer';
         state.feedbackDirty = false;
         state.feedbackDraft = '';
+        state.commentEdit = null;
         state.pageMode = 'teacher';
         renderAll();
         openPasswordModal('teacher');
@@ -1597,7 +1616,8 @@
             </button>`).join('')}</div>
           <div class="empty-state" style="margin-top:16px">${escapeHtml(selectedTeacher.name)}在${escapeHtml(termLabel(getActiveTerm()))}尚未設定課表。<br><button class="btn btn-primary" id="openScheduleSettingsBtn" type="button" style="margin-top:12px">前往課表設定</button></div>
         </section>`;
-        els.content.querySelectorAll('[data-teacher-id]').forEach(button => button.addEventListener('click', () => {
+        els.content.querySelectorAll('.teacher-card[data-teacher-id]').forEach(button => button.addEventListener('click', () => {
+          if (!confirmCommentContextChange()) return;
           state.teacherId = button.dataset.teacherId;
           state.selectedScheduleId = (getTimetable(state.termId, state.teacherId)[0] || {}).id || '';
           renderAll();
@@ -1661,8 +1681,9 @@
       bindDynamicInputs(els.content);
       bindQuickHomeworkControls(els.content);
       bindCommentThreadControls(els.content);
-      els.content.querySelectorAll('[data-teacher-id]').forEach(button => {
+      els.content.querySelectorAll('.teacher-card[data-teacher-id]').forEach(button => {
         button.addEventListener('click', () => {
+          if (!confirmCommentContextChange()) return;
           state.teacherId = button.dataset.teacherId;
           state.selectedScheduleId = (getTimetable(state.termId, state.teacherId)[0] || {}).id || '';
           state.selectedIndividualId = '';
@@ -1671,6 +1692,7 @@
       });
       els.content.querySelectorAll('[data-schedule-id]').forEach(button => {
         button.addEventListener('click', () => {
+          if (!confirmCommentContextChange()) return;
           const entry = getTimetable(state.termId, state.teacherId).find(item => item.id === button.dataset.scheduleId);
           if (!entry) return;
           state.selectedScheduleId = entry.id;
@@ -1683,6 +1705,10 @@
       });
       const studentSelect = document.getElementById('teacherStudentSelect');
       if (studentSelect) studentSelect.addEventListener('change', event => {
+        if (!confirmCommentContextChange()) {
+          event.target.value = state.selectedIndividualId;
+          return;
+        }
         state.selectedIndividualId = event.target.value;
         renderAll();
       });
@@ -1906,21 +1932,28 @@
           });
         });
         selectedPeople.forEach(person => {
-          getIndividualCommentMessages(person, data.comments || {}).forEach(message => {
-            const messageDate = message.date || week.weekStart;
-            const parsedDate = parseISO(messageDate);
-            const dayIndex = Math.max(0, (parsedDate.getDay() + 6) % 7);
-            const timeLabel = message.createdAt ? formatCommentTimestamp(message) : '既有留言';
-            add(
-              week,
-              messageDate,
-              message.date ? weekdayName(dayIndex) : '整週',
-              '師長留言',
-              message.author || getCommentRoleLabel(message.role),
-              person.name,
-              `${getCommentRoleLabel(message.role)}｜${timeLabel}`,
-              message.content
-            );
+          getIndividualCommentMessages(person, data.comments || {}, { includeDeleted:true }).forEach(message => {
+            const history = Array.isArray(message.history) && message.history.length ? message.history : [message];
+            history.forEach(event => {
+              const messageDate = event.date || message.date || week.weekStart;
+              const parsedDate = parseISO(messageDate);
+              const dayIndex = Math.max(0, (parsedDate.getDay() + 6) % 7);
+              const timeLabel = event.createdAt ? formatCommentTimestamp(event) : '既有留言';
+              const actionLabel = getCommentActionLabel(event.action, event.legacy);
+              const content = event.action === 'delete'
+                ? `已刪除留言；刪除前內容：${event.previousContent || message.content || ''}`
+                : event.content;
+              add(
+                week,
+                messageDate,
+                event.date ? weekdayName(dayIndex) : '整週',
+                '師長留言異動',
+                message.author || getCommentRoleLabel(message.role),
+                person.name,
+                `${getCommentRoleLabel(message.role)}｜${actionLabel}｜${timeLabel}`,
+                content
+              );
+            });
           });
         });
       });
@@ -2632,6 +2665,7 @@
         state.dirty = false;
         state.feedbackDirty = false;
         state.feedbackDraft = '';
+        state.commentEdit = null;
         closeUtility(true);
         await loadWeek(initialWeekStart(getActiveTerm()));
         showToast(`已刪除${label}的 ${starts.length} 週紀錄`);
@@ -2864,13 +2898,15 @@
 
       bindDynamicInputs(els.content);
       bindIndividualFeedbackInputs(els.content);
+      bindCommentThreadControls(els.content);
       document.getElementById('individualBackBtn').addEventListener('click', async () => {
-        if (state.feedbackDirty && !confirm('導師或家長留言尚未儲存，確定返回個案名單嗎？')) return;
+        if ((state.feedbackDirty || state.commentEdit) && !confirm('導師或家長留言尚未儲存，確定返回個案名單嗎？')) return;
         state.unlockedIndividualId = '';
         state.individualPassword = '';
         state.individualRole = 'viewer';
         state.feedbackDirty = false;
         state.feedbackDraft = '';
+        state.commentEdit = null;
         if (firebaseReady) await firebaseSignOutToPublic();
         else renderAll();
       });
@@ -2951,6 +2987,10 @@
       bindDynamicInputs(els.content);
       bindQuickHomeworkControls(els.content);
       document.getElementById('individualSelect').addEventListener('change', event => {
+        if (!confirmCommentContextChange()) {
+          event.target.value = state.selectedIndividualId;
+          return;
+        }
         state.selectedIndividualId = event.target.value;
         renderAll();
       });
@@ -3038,16 +3078,19 @@
       return { homeroom: String(source.homeroom || ''), parent: String(source.parent || ''), updatedAt: String(source.updatedAt || '') };
     }
 
-    function createCommentEntry(role, content, author, teacherId = '') {
+    function createCommentEntry(role, content, author, teacherId = '', options = {}) {
       const now = new Date();
+      const action = ['create','edit','delete'].includes(options.action) ? options.action : 'create';
       return {
-        id: `msg-${now.getTime()}-${Math.random().toString(36).slice(2,8)}`,
+        id: `${action === 'create' ? 'msg' : 'evt'}-${now.getTime()}-${Math.random().toString(36).slice(2,8)}`,
+        action,
+        targetId: action === 'create' ? '' : String(options.targetId || ''),
         role: String(role || ''),
         author: String(author || ''),
         teacherId: String(teacherId || ''),
         createdAt: now.toISOString(),
         date: toISO(now),
-        content: String(content || '').trim()
+        content: action === 'delete' ? '' : String(content || '').trim()
       };
     }
 
@@ -3057,19 +3100,26 @@
       return current ? current + '\n' + serialized : serialized;
     }
 
-    function parseCommentEntries(value, defaults = {}) {
+    function parseCommentEvents(value, defaults = {}) {
       const source = String(value || '');
       if (!source.trim()) return [];
-      const messages = [];
+      const events = [];
       const legacyLines = [];
       source.split(/\r?\n/).forEach(line => {
         if (line.startsWith(COMMENT_ENTRY_PREFIX)) {
           try {
             const parsed = JSON.parse(line.slice(COMMENT_ENTRY_PREFIX.length));
+            const action = ['create','edit','delete'].includes(parsed && parsed.action) ? parsed.action : 'create';
             const content = String(parsed && parsed.content || '').trim();
-            if (content) {
-              messages.push({
-                id: String(parsed.id || `msg-${messages.length + 1}`),
+            const targetId = String(parsed && parsed.targetId || '');
+            const valid = action === 'create' ? Boolean(content)
+              : action === 'edit' ? Boolean(targetId && content)
+                : Boolean(targetId);
+            if (valid) {
+              events.push({
+                id: String(parsed.id || `${action === 'create' ? 'msg' : 'evt'}-${events.length + 1}`),
+                action,
+                targetId,
                 role: String(defaults.role || ''),
                 author: String(defaults.author || ''),
                 teacherId: String(defaults.teacherId || ''),
@@ -3085,8 +3135,10 @@
       });
       const legacyContent = legacyLines.join('\n').trim();
       if (legacyContent) {
-        messages.unshift({
+        events.unshift({
           id: `legacy-${defaults.role || 'message'}-${defaults.teacherId || 'general'}`,
+          action: 'create',
+          targetId: '',
           role: String(defaults.role || ''),
           author: String(defaults.author || ''),
           teacherId: String(defaults.teacherId || ''),
@@ -3096,28 +3148,90 @@
           legacy: true
         });
       }
+      return events;
+    }
+
+    function projectCommentEvents(events) {
+      const messages = [];
+      const byId = new Map();
+      (events || []).forEach(event => {
+        if (event.action === 'create') {
+          if (!event.id || byId.has(event.id)) return;
+          const message = {
+            ...event,
+            history:[{ ...event }],
+            deleted:false,
+            editedAt:'',
+            deletedAt:'',
+            lastActivityAt:event.createdAt || ''
+          };
+          byId.set(message.id, message);
+          messages.push(message);
+          return;
+        }
+        const target = byId.get(event.targetId);
+        if (!target || target.deleted) return;
+        const historyEvent = { ...event, previousContent:target.content };
+        target.history.push(historyEvent);
+        target.lastActivityAt = event.createdAt || target.lastActivityAt;
+        if (event.action === 'edit') {
+          target.content = event.content;
+          target.editedAt = event.createdAt || '';
+        }
+        if (event.action === 'delete') {
+          target.deleted = true;
+          target.deletedAt = event.createdAt || '';
+        }
+      });
       return messages;
     }
 
-    function getIndividualCommentMessages(person, fallbackComments = {}) {
+    function parseCommentEntries(value, defaults = {}, options = {}) {
+      const messages = projectCommentEvents(parseCommentEvents(value, defaults));
+      return options.includeDeleted ? messages : messages.filter(message => !message.deleted);
+    }
+
+    function appendCommentMutation(existing, defaults, action = 'create', targetId = '', content = '') {
+      const normalizedAction = ['create','edit','delete'].includes(action) ? action : 'create';
+      const text = String(content || '').trim();
+      if (normalizedAction !== 'delete' && !text) throw new Error('留言內容不可空白。');
+      if (text.length > 2000) throw new Error('單則留言不可超過 2000 個字元。');
+      if (normalizedAction !== 'create') {
+        const target = parseCommentEntries(existing, defaults, { includeDeleted:true })
+          .find(message => message.id === targetId && !message.deleted);
+        if (!target) throw new Error('找不到可修改的原留言。');
+      }
+      const entry = createCommentEntry(
+        defaults.role,
+        normalizedAction === 'delete' ? '' : text,
+        defaults.author,
+        defaults.teacherId || '',
+        { action:normalizedAction, targetId }
+      );
+      return appendCommentEntry(existing, entry);
+    }
+
+    function getIndividualCommentMessages(person, fallbackComments = {}, options = {}) {
       const messages = [];
+      let hasTeacherSource = false;
       TEACHERS.forEach(teacher => {
         const comments = getTeacherComments(person, teacher.id);
+        if (String(comments.specialTeacher || '').trim()) hasTeacherSource = true;
         messages.push(...parseCommentEntries(comments.specialTeacher, {
           role:'teacher', author:teacher.name, teacherId:teacher.id
-        }));
+        }, options));
       });
-      if (!messages.some(message => message.role === 'teacher')) {
+      if (!hasTeacherSource) {
         messages.push(...parseCommentEntries(fallbackComments && fallbackComments.specialTeacher, {
           role:'teacher', author:'特教教師', teacherId:'legacy'
-        }));
+        }, options));
       }
       const family = getFamilyFeedback(person);
-      messages.push(...parseCommentEntries(family.homeroom, { role:'homeroom', author:'導師' }));
-      messages.push(...parseCommentEntries(family.parent, { role:'parent', author:'家長' }));
+      messages.push(...parseCommentEntries(family.homeroom, { role:'homeroom', author:'導師' }, options));
+      messages.push(...parseCommentEntries(family.parent, { role:'parent', author:'家長' }, options));
       return messages.map((message, index) => ({ ...message, sequence:index })).sort((a,b) => {
-        const parsedATime = a.createdAt ? Date.parse(a.createdAt) : Number.NaN;
-        const parsedBTime = b.createdAt ? Date.parse(b.createdAt) : Number.NaN;
+        const parsedATime = a.lastActivityAt ? Date.parse(a.lastActivityAt) : Number.NaN;
+        const parsedBTime = b.lastActivityAt ? Date.parse(b.lastActivityAt) : Number.NaN;
         const aTime = Number.isNaN(parsedATime) ? Number.NEGATIVE_INFINITY : parsedATime;
         const bTime = Number.isNaN(parsedBTime) ? Number.NEGATIVE_INFINITY : parsedBTime;
         if (aTime !== bTime) return aTime - bTime;
@@ -3138,19 +3252,81 @@
       }).format(date);
     }
 
-    function renderCommentThread(messages, emptyText = '本週尚無留言') {
-      if (!messages.length) return `<div class="empty-state">${escapeHtml(emptyText)}</div>`;
-      return `<p class="comment-thread-note">最新留言顯示在上方；每則留言都會保留日期、時間與身分。</p>
+    function formatCommentActivity(message) {
+      if (message && message.deletedAt) return `${formatCommentTimestamp({ createdAt:message.deletedAt, date:message.date })}・已刪除`;
+      if (message && message.editedAt) return `${formatCommentTimestamp({ createdAt:message.editedAt, date:message.date })}・已編輯`;
+      return formatCommentTimestamp(message);
+    }
+
+    function getCommentActionLabel(action, legacy = false) {
+      if (legacy) return '既有留言';
+      return { create:'新增', edit:'編輯', delete:'刪除' }[action] || '異動';
+    }
+
+    function renderCommentAuditHistory(message) {
+      const history = Array.isArray(message.history) ? message.history : [];
+      if (history.length <= 1 && !message.deleted) return '';
+      return `<details class="comment-audit-history">
+        <summary>完整異動紀錄・${history.length} 筆</summary>
+        <ol class="comment-audit-list">
+          ${history.map(event => {
+            const content = event.action === 'delete'
+              ? `刪除前內容：${event.previousContent || message.content || ''}`
+              : event.content;
+            return `<li class="comment-audit-event">
+              <strong>${escapeHtml(getCommentActionLabel(event.action, event.legacy))}</strong>
+              <span>${escapeHtml(formatCommentTimestamp(event))}</span>
+              <div>${escapeHtml(content || '此留言已刪除')}</div>
+            </li>`;
+          }).join('')}
+        </ol>
+      </details>`;
+    }
+
+    function renderCommentThread(messages, emptyText = '本週尚無留言', options = {}) {
+      const auditMode = Boolean(options.auditMode);
+      const visibleMessages = auditMode ? messages : messages.filter(message => !message.deleted);
+      if (!visibleMessages.length) return `<div class="empty-state">${escapeHtml(emptyText)}</div>`;
+      const note = auditMode
+        ? '教師完整紀錄會保留每次新增、編輯與刪除；其他角色只會看到最新結果。'
+        : '最新留言顯示在上方；編輯後只呈現最新版，刪除後不再顯示。';
+      return `<p class="comment-thread-note">${escapeHtml(note)}</p>
         <div class="comment-thread">
-          ${[...messages].reverse().map(message => `
-            <article class="comment-thread-message ${escapeAttr(message.role)}">
+          ${[...visibleMessages].reverse().map(message => {
+            const teacherEditable = options.context === 'teacher'
+              && message.role === 'teacher'
+              && message.teacherId === options.editableTeacherId;
+            const familyEditable = options.context === 'family'
+              && message.role === options.editableRole;
+            const canEdit = !message.deleted && (teacherEditable || familyEditable);
+            const editState = state.commentEdit;
+            const isEditing = canEdit && editState
+              && editState.messageId === message.id
+              && editState.personIndex === options.personIndex
+              && editState.context === options.context;
+            return `
+            <article class="comment-thread-message ${escapeAttr(message.role)} ${message.deleted ? 'is-deleted' : ''}">
               <div class="comment-thread-meta">
                 <strong>${escapeHtml(message.author || getCommentRoleLabel(message.role))}</strong>
                 <span class="comment-thread-role">${escapeHtml(getCommentRoleLabel(message.role))}</span>
-                <span class="comment-thread-time">${escapeHtml(formatCommentTimestamp(message))}</span>
+                <span class="comment-thread-time">${escapeHtml(formatCommentActivity(message))}</span>
               </div>
-              <div class="comment-thread-content">${escapeHtml(message.content)}</div>
-            </article>`).join('')}
+              <div class="comment-thread-content">${message.deleted
+                ? `<strong>此留言已由作者刪除</strong>\n刪除前最後內容：${escapeHtml(message.content)}`
+                : escapeHtml(message.content)}</div>
+              ${isEditing ? `<div class="comment-edit-form">
+                <textarea class="textarea" data-comment-edit-draft maxlength="2000">${escapeHtml(editState.content)}</textarea>
+                <div class="comment-message-actions">
+                  <button class="btn" type="button" data-cancel-comment-edit>取消</button>
+                  <button class="btn btn-primary" type="button" data-save-comment-edit>儲存修改</button>
+                </div>
+              </div>` : canEdit ? `<div class="comment-message-actions">
+                <button class="btn btn-soft" type="button" data-edit-comment data-comment-id="${escapeAttr(message.id)}" data-person-index="${options.personIndex}" data-comment-context="${escapeAttr(options.context || '')}" data-teacher-id="${escapeAttr(options.editableTeacherId || '')}">✎ 編輯</button>
+                <button class="btn btn-danger" type="button" data-delete-comment data-comment-id="${escapeAttr(message.id)}" data-person-index="${options.personIndex}" data-comment-context="${escapeAttr(options.context || '')}" data-teacher-id="${escapeAttr(options.editableTeacherId || '')}">刪除</button>
+              </div>` : ''}
+              ${auditMode ? renderCommentAuditHistory(message) : ''}
+            </article>`;
+          }).join('')}
         </div>`;
     }
 
@@ -3173,7 +3349,9 @@
           </span>
         </summary>
         <div class="teacher-record-accordion-body">
-          ${renderCommentThread(messages)}
+          ${renderCommentThread(messages, '本週尚無留言', {
+            context:'family', editableRole, personIndex
+          })}
           ${editableRole ? `<div class="comment-compose">
             <h3>新增${escapeHtml(editableLabel)}留言</h3>
             <p>每次新增都會保留原留言，並自動標示日期與時間。</p>
@@ -3188,7 +3366,7 @@
                 <button class="btn btn-soft" id="changeFeedbackPasswordBtn" type="button">變更我的密碼</button>
               </div>
             </div>
-          </div>` : `<div class="feedback-form"><h3>留言權限</h3><p>學生密碼可查看完整留言串；導師與家長使用各自密碼登入後，即可新增自己的留言。</p></div>`}
+          </div>` : `<div class="feedback-form"><h3>留言權限</h3><p>學生密碼可查看目前留言；導師與家長使用各自密碼登入後，可以新增、編輯或刪除自己的留言。</p></div>`}
         </div>
       </details>`;
     }
@@ -3197,7 +3375,7 @@
       const teacher = getTeacher(state.teacherId);
       const records = getTeacherRecords(person, teacher.id);
       const indexes = Array.isArray(recordIndexes) && recordIndexes.length ? recordIndexes : records.map((_, index) => index);
-      const messages = getIndividualCommentMessages(person, state.data.comments || {});
+      const messages = getIndividualCommentMessages(person, state.data.comments || {}, { includeDeleted:true });
       return `<section class="private-panel">
         <div class="eyebrow">個案資料僅供密碼頁閱覽・目前編輯：${escapeHtml(teacher.name)}</div>
         <div class="case-account-grid">
@@ -3228,8 +3406,10 @@
             </div>
           </article>`;
         }).join('')}</div>
-        <h2 class="private-section-title">${escapeHtml(teacher.name)}・每週留言串</h2>
-        ${renderCommentThread(messages)}
+        <h2 class="private-section-title">${escapeHtml(teacher.name)}・教師完整留言紀錄</h2>
+        ${renderCommentThread(messages, '本週尚無留言', {
+          auditMode:true, context:'teacher', editableTeacherId:teacher.id, personIndex
+        })}
         <div class="comment-compose">
           <h3>新增${escapeHtml(teacher.name)}留言</h3>
           <p>加入後會列入本週修改；請再按頁面下方「儲存本週」，才會同步到學生頁。</p>
@@ -3665,6 +3845,13 @@
       if (changePasswordButton) changePasswordButton.addEventListener('click', changeOwnFeedbackPassword);
     }
 
+    function confirmCommentContextChange() {
+      if (!state.commentEdit) return true;
+      if (!confirm('目前的留言修改尚未儲存，確定要切換嗎？')) return false;
+      state.commentEdit = null;
+      return true;
+    }
+
     function bindCommentThreadControls(root) {
       root.querySelectorAll('[data-add-teacher-comment]').forEach(button => {
         button.addEventListener('click', () => {
@@ -3685,18 +3872,206 @@
             return;
           }
           const comments = getTeacherComments(person, teacherId);
-          const entry = createCommentEntry('teacher', content, teacher.name, teacherId);
-          setPath(
-            state.data,
-            `individuals.${personIndex}.commentsByTeacher.${teacherId}.specialTeacher`,
-            appendCommentEntry(comments.specialTeacher, entry)
-          );
+          try {
+            setPath(
+              state.data,
+              `individuals.${personIndex}.commentsByTeacher.${teacherId}.specialTeacher`,
+              appendCommentMutation(
+                comments.specialTeacher,
+                { role:'teacher', author:teacher.name, teacherId },
+                'create',
+                '',
+                content
+              )
+            );
+          } catch (error) {
+            showToast(error.message || '留言新增失敗', true);
+            return;
+          }
           state.teacherStudentRecordsOpen = true;
           markDirty();
           renderAll();
           showToast('留言已加入；請再按「儲存本週」完成同步');
         });
       });
+
+      root.querySelectorAll('[data-edit-comment]').forEach(button => {
+        button.addEventListener('click', () => {
+          if (state.feedbackDirty) {
+            showToast('請先新增或清除目前尚未儲存的留言', true);
+            return;
+          }
+          const target = getCommentActionTarget(button);
+          if (!target || !canCurrentRoleMutateComment(target)) {
+            showToast('只能編輯自己新增的留言', true);
+            return;
+          }
+          state.commentEdit = {
+            context:target.context,
+            personIndex:target.personIndex,
+            teacherId:target.teacherId,
+            messageId:target.message.id,
+            content:target.message.content
+          };
+          if (target.context === 'teacher') state.teacherStudentRecordsOpen = true;
+          renderAll();
+        });
+      });
+
+      root.querySelectorAll('[data-comment-edit-draft]').forEach(input => {
+        input.addEventListener('input', event => {
+          if (state.commentEdit) state.commentEdit.content = event.currentTarget.value;
+        });
+      });
+
+      root.querySelectorAll('[data-cancel-comment-edit]').forEach(button => {
+        button.addEventListener('click', () => {
+          state.commentEdit = null;
+          renderAll();
+        });
+      });
+
+      root.querySelectorAll('[data-save-comment-edit]').forEach(button => {
+        button.addEventListener('click', async () => {
+          const edit = state.commentEdit;
+          const content = String(edit && edit.content || '').trim();
+          if (!edit || !content) {
+            showToast('留言內容不可空白', true);
+            return;
+          }
+          if (edit.context === 'teacher') {
+            applyTeacherCommentMutation(edit, 'edit');
+          } else {
+            await saveFamilyCommentMutation(edit, 'edit', button);
+          }
+        });
+      });
+
+      root.querySelectorAll('[data-delete-comment]').forEach(button => {
+        button.addEventListener('click', async () => {
+          if (state.feedbackDirty) {
+            showToast('請先新增或清除目前尚未儲存的留言', true);
+            return;
+          }
+          const target = getCommentActionTarget(button);
+          if (!target || !canCurrentRoleMutateComment(target)) {
+            showToast('只能刪除自己新增的留言', true);
+            return;
+          }
+          if (!confirm('刪除後，學生、導師與家長將看不到這則留言；特教教師端仍會保留刪除紀錄。確定刪除嗎？')) return;
+          const edit = {
+            context:target.context,
+            personIndex:target.personIndex,
+            teacherId:target.teacherId,
+            messageId:target.message.id,
+            content:target.message.content
+          };
+          if (target.context === 'teacher') {
+            applyTeacherCommentMutation(edit, 'delete');
+          } else {
+            await saveFamilyCommentMutation(edit, 'delete', button);
+          }
+        });
+      });
+    }
+
+    function getCommentActionTarget(button) {
+      const personIndex = Number(button.dataset.personIndex);
+      const context = String(button.dataset.commentContext || '');
+      const teacherId = String(button.dataset.teacherId || '');
+      const messageId = String(button.dataset.commentId || '');
+      const person = state.data && state.data.individuals && state.data.individuals[personIndex];
+      if (!person || !messageId || !['teacher','family'].includes(context)) return null;
+      const message = getIndividualCommentMessages(
+        person,
+        state.data.comments || {},
+        { includeDeleted:true }
+      ).find(item => item.id === messageId);
+      return message ? { person, personIndex, context, teacherId, message } : null;
+    }
+
+    function canCurrentRoleMutateComment(target) {
+      if (!target || target.message.deleted) return false;
+      if (target.context === 'teacher') {
+        return state.editing
+          && target.message.role === 'teacher'
+          && target.message.teacherId === target.teacherId
+          && target.teacherId === state.teacherId;
+      }
+      return ['homeroom','parent'].includes(state.individualRole)
+        && target.message.role === state.individualRole;
+    }
+
+    function applyTeacherCommentMutation(edit, action) {
+      const person = state.data.individuals[edit.personIndex];
+      const teacher = TEACHERS.find(item => item.id === edit.teacherId);
+      if (!person || !teacher || !['edit','delete'].includes(action)) return;
+      const comments = getTeacherComments(person, teacher.id);
+      const target = parseCommentEntries(
+        comments.specialTeacher,
+        { role:'teacher', author:teacher.name, teacherId:teacher.id },
+        { includeDeleted:true }
+      ).find(message => message.id === edit.messageId && !message.deleted);
+      if (!target) {
+        showToast('找不到可修改的原留言', true);
+        return;
+      }
+      try {
+        setPath(
+          state.data,
+          `individuals.${edit.personIndex}.commentsByTeacher.${teacher.id}.specialTeacher`,
+          appendCommentMutation(
+            comments.specialTeacher,
+            { role:'teacher', author:teacher.name, teacherId:teacher.id },
+            action,
+            target.id,
+            action === 'delete' ? '' : edit.content
+          )
+        );
+      } catch (error) {
+        showToast(error.message || '留言異動失敗', true);
+        return;
+      }
+      state.commentEdit = null;
+      state.teacherStudentRecordsOpen = true;
+      markDirty();
+      renderAll();
+      showToast(action === 'delete'
+        ? '刪除已加入；請再按「儲存本週」完成同步'
+        : '修改已加入；請再按「儲存本週」完成同步');
+    }
+
+    async function saveFamilyCommentMutation(edit, action, button) {
+      const person = getIndividualById(state.unlockedIndividualId);
+      const role = state.individualRole;
+      if (!person || !state.individualPassword || !['homeroom','parent'].includes(role)) return;
+      button.disabled = true;
+      button.textContent = action === 'delete' ? '刪除中…' : '儲存中…';
+      try {
+        const result = await callBackend(
+          'saveIndividualFeedback',
+          state.individualPassword,
+          person.id,
+          state.weekStart,
+          role,
+          action === 'delete' ? '' : edit.content,
+          action,
+          edit.messageId
+        );
+        adoptIndividualFeedbackResult(result);
+        state.commentEdit = null;
+        state.feedbackDirty = false;
+        state.feedbackDraft = '';
+        renderAll();
+        showToast(action === 'delete'
+          ? `${getIndividualRoleLabel(role)}留言已刪除`
+          : `${getIndividualRoleLabel(role)}留言已更新`);
+      } catch (error) {
+        console.error(error);
+        showToast(error.message || '留言異動失敗', true);
+        button.disabled = false;
+        button.textContent = action === 'delete' ? '刪除' : '儲存修改';
+      }
     }
 
     function bindQuickHomeworkControls(root) {
@@ -3832,6 +4207,7 @@
           state.individualRole = result.role || 'viewer';
           state.feedbackDirty = false;
           state.feedbackDraft = '';
+          state.commentEdit = null;
           state.pageMode = 'individuals';
           await loadWeek(state.weekStart);
         } else {
@@ -3860,10 +4236,23 @@
       return callBackend('verifyIndividualPassword', password, person.id, state.weekStart);
     }
 
+    function adoptIndividualFeedbackResult(result) {
+      state.data = normalizeClientData(result.data || state.data, state.weekStart);
+      state.data.updatedAt = result.updatedAt || state.data.updatedAt;
+      state.originalData = deepClone(state.data);
+      state.originalConfig = deepClone(state.appConfig);
+      persistAppConfig();
+      state.weeks = Array.isArray(result.weeks) ? result.weeks : state.weeks;
+    }
+
     async function saveIndividualFeedback() {
       const person = getIndividualById(state.unlockedIndividualId);
       const button = document.getElementById('saveIndividualFeedbackBtn');
       if (!person || !state.individualPassword || !state.feedbackDirty) return;
+      if (state.commentEdit) {
+        showToast('請先完成或取消目前的留言編輯', true);
+        return;
+      }
       if (button) {
         button.disabled = true;
         button.textContent = '儲存中…';
@@ -3874,16 +4263,12 @@
         const content = String(state.feedbackDraft || '').trim();
         if (!content) throw new Error('請先輸入留言內容。');
         const result = await callBackend(
-          'saveIndividualFeedback', state.individualPassword, person.id, state.weekStart, role, content
+          'saveIndividualFeedback', state.individualPassword, person.id, state.weekStart, role, content, 'create', ''
         );
-        state.data = normalizeClientData(result.data || state.data, state.weekStart);
-        state.data.updatedAt = result.updatedAt || state.data.updatedAt;
-        state.originalData = deepClone(state.data);
-        state.originalConfig = deepClone(state.appConfig);
-        persistAppConfig();
-        state.weeks = Array.isArray(result.weeks) ? result.weeks : state.weeks;
+        adoptIndividualFeedbackResult(result);
         state.feedbackDirty = false;
         state.feedbackDraft = '';
+        state.commentEdit = null;
         renderAll();
         showToast(isCloudStorage() ? `${getIndividualRoleLabel(role)}留言已新增到雲端` : `${getIndividualRoleLabel(role)}留言已新增到此瀏覽器`);
       } catch (error) {
@@ -3977,6 +4362,7 @@
       state.settingsDirty = false;
       state.feedbackDirty = false;
       state.feedbackDraft = '';
+      state.commentEdit = null;
       state.pageMode = 'individuals';
       state.unlockedIndividualId = '';
       if (els.utilityModal.classList.contains('show')) closeUtility(true);
@@ -4857,23 +5243,26 @@
       return { ok:true, updatedAt, weeks:await firebaseListWeeks(), data };
     }
 
-    async function firebaseSaveIndividualFeedback(studentId, weekStart, role, value) {
+    async function firebaseSaveIndividualFeedback(studentId, weekStart, role, value, action = 'create', targetId = '') {
       const profile = await firebaseCurrentProfile();
       if (profile.studentId !== studentId || profile.role !== role || !['homeroom','parent'].includes(role)) {
         throw new Error('目前帳號沒有此留言權限。');
       }
       const target = weekStartMonday(weekStart);
       const updatedAt = firebaseTimestamp();
-      const content = String(value || '').trim();
-      if (!content) throw new Error('請先輸入留言內容。');
       const reference = firebaseApi.doc(
         firebaseDb, FIREBASE_COLLECTIONS.comments, firebaseWeekDocumentId(studentId, target)
       );
       await firebaseApi.runTransaction(firebaseDb, async transaction => {
         const existing = await transaction.get(reference);
         const current = existing.exists() ? String(existing.data()[role] || '') : '';
-        const entry = createCommentEntry(role, content, getIndividualRoleLabel(role));
-        const nextValue = appendCommentEntry(current, entry);
+        const nextValue = appendCommentMutation(
+          current,
+          { role, author:getIndividualRoleLabel(role), teacherId:'' },
+          action,
+          String(targetId || ''),
+          String(value || '')
+        );
         const payload = existing.exists()
           ? { [role]:nextValue, updatedAt }
           : {
@@ -4997,7 +5386,14 @@
         return firebaseIndividualLogin(String(args[0] || ''), String(args[1] || ''));
       }
       if (method === 'saveIndividualFeedback') {
-        return firebaseSaveIndividualFeedback(String(args[1] || ''), args[2], String(args[3] || ''), String(args[4] || ''));
+        return firebaseSaveIndividualFeedback(
+          String(args[1] || ''),
+          args[2],
+          String(args[3] || ''),
+          String(args[4] || ''),
+          String(args[5] || 'create'),
+          String(args[6] || '')
+        );
       }
       if (method === 'changeFeedbackPassword') {
         return firebaseChangeOwnPassword(String(args[1] || ''), String(args[2] || ''), String(args[3] || ''));
@@ -5126,18 +5522,22 @@
         const id = String(args[1] || '');
         const weekStart = weekStartMonday(args[2] || initialWeekStart());
         const role = String(args[3] || '');
-        const value = String(args[4] || '').trim();
+        const value = String(args[4] || '');
+        const action = String(args[5] || 'create');
+        const targetId = String(args[6] || '');
         if (!['homeroom','parent'].includes(role)) throw new Error('目前帳號沒有此留言權限。');
-        if (!value) throw new Error('請先輸入留言內容。');
         const raw = storage.getItem(prefix + 'week_' + weekStart);
         const data = normalizeClientData(raw ? JSON.parse(raw) : createEmptyWeekClient(weekStart), weekStart);
         const person = data.individuals.find(item => item.id === id);
         if (!person || !await verifyRolePassword(person, role, password)) throw new Error('留言密碼已失效，請重新登入。');
         const updatedAt = new Intl.DateTimeFormat('zh-TW', { dateStyle:'short', timeStyle:'medium', hour12:false }).format(new Date());
         const family = getFamilyFeedback(person);
-        family[role] = appendCommentEntry(
+        family[role] = appendCommentMutation(
           family[role],
-          createCommentEntry(role, value, getIndividualRoleLabel(role))
+          { role, author:getIndividualRoleLabel(role), teacherId:'' },
+          action,
+          targetId,
+          value
         );
         family.updatedAt = updatedAt;
         person.familyFeedback = family;
