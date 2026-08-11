@@ -202,6 +202,7 @@
     .teacher-record-summary-copy strong { color: var(--primary); font-size: 1.13rem; }
     .teacher-record-summary-copy span { margin-top: 4px; color: var(--muted); font-size: .84rem; font-weight: 650; }
     .teacher-record-accordion-body { padding: 18px 22px 22px; }
+    .private-panel.individual-record-accordion { padding: 0; }
     .teacher-sync-note {
       margin: 0 0 14px; padding: 11px 13px; border-radius: 13px;
       background: var(--blue-soft); color: #365f84; font-size: .9rem; font-weight: 800;
@@ -2801,15 +2802,19 @@
           <span class="badge badge-green">🔓 ${escapeHtml(person.name || person.id)}・${escapeHtml(getIndividualRoleLabel(state.individualRole))}模式</span>
         </div>
         ${renderStudentSchedule(person)}
-        <section class="private-panel">
-          <div class="eyebrow">${escapeHtml(person.name || '未命名個案')}・${escapeHtml(getTeacherAssignmentSummary(person))}</div>
-          <h2 class="private-heading">個案詳細學習紀錄</h2>
-          <div class="detail-grid" style="margin-top:12px">
-            ${recordCards}
-          </div>
-        </section>
         <h2 class="private-section-title">本週課程與評量紀錄</h2>
         <div class="days-grid ${state.viewMode === 'week' ? 'week-view' : ''}">${courseCards}</div>
+        <details class="private-panel teacher-record-accordion individual-record-accordion">
+          <summary>
+            <span class="teacher-record-summary-copy">
+              <strong>個案學習紀錄</strong>
+              <span>${escapeHtml(person.name || '未命名個案')}・${escapeHtml(getTeacherAssignmentSummary(person))}・點擊展開查看</span>
+            </span>
+          </summary>
+          <div class="teacher-record-accordion-body">
+            <div class="detail-grid">${recordCards}</div>
+          </div>
+        </details>
         ${renderIndividualComments(person, personIndex)}`;
 
       bindDynamicInputs(els.content);
