@@ -496,6 +496,46 @@
     .group-quick-add { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 8px; }
     .group-quick-add .btn { padding: 6px 9px; font-size: .8rem; }
     .readonly-time { background: #f0f4f2; color: #52645d; }
+    .schedule-tone-green { --schedule-bg: #eef8f4; --schedule-border: #9fc9bb; --schedule-hover: #dceee8; --schedule-accent: #327b6b; --schedule-text: #275e52; }
+    .schedule-tone-blue { --schedule-bg: #eef6fc; --schedule-border: #9dc4df; --schedule-hover: #daeaf6; --schedule-accent: #3f7ea8; --schedule-text: #315f7e; }
+    .schedule-tone-orange { --schedule-bg: #fff5e9; --schedule-border: #edc18c; --schedule-hover: #f9e6ca; --schedule-accent: #b97328; --schedule-text: #835019; }
+    .schedule-tone-purple { --schedule-bg: #f6f0fb; --schedule-border: #cbb2df; --schedule-hover: #eadcf5; --schedule-accent: #845da4; --schedule-text: #63457a; }
+    .schedule-tone-yellow { --schedule-bg: #fffbe8; --schedule-border: #dfcf84; --schedule-hover: #f7efbf; --schedule-accent: #8d7617; --schedule-text: #6f5d16; }
+    .schedule-tone-pink { --schedule-bg: #fff1f5; --schedule-border: #e5afbf; --schedule-hover: #f8dce5; --schedule-accent: #ad5f79; --schedule-text: #81465a; }
+    .schedule-tone-cyan { --schedule-bg: #ebf9f8; --schedule-border: #99d0cc; --schedule-hover: #d5efed; --schedule-accent: #337f7a; --schedule-text: #2a625e; }
+    .schedule-tone-gray { --schedule-bg: #f3f5f5; --schedule-border: #c2cccc; --schedule-hover: #e4e9e8; --schedule-accent: #687873; --schedule-text: #52615d; }
+    .schedule-entry[class*="schedule-tone-"],
+    .schedule-board-entry[class*="schedule-tone-"],
+    .selected-class-banner[class*="schedule-tone-"] {
+      border-color: var(--schedule-border); background: var(--schedule-bg);
+    }
+    .schedule-entry[class*="schedule-tone-"]:hover,
+    .schedule-entry[class*="schedule-tone-"].active,
+    .schedule-board-entry[class*="schedule-tone-"]:hover,
+    .schedule-board-entry[class*="schedule-tone-"].active {
+      border-color: var(--schedule-accent); background: var(--schedule-hover);
+      box-shadow: 0 5px 14px rgba(52, 83, 71, .12);
+    }
+    .schedule-entry[class*="schedule-tone-"] strong,
+    .schedule-board-entry[class*="schedule-tone-"] strong { color: var(--schedule-text); }
+    .selected-class-banner[class*="schedule-tone-"] { border-left-color: var(--schedule-accent); }
+    .schedule-color-field { min-width: 0; margin: 14px 0 0; border: 0; padding: 0; }
+    .schedule-color-field legend { padding: 0; }
+    .schedule-color-help { margin: 4px 0 0; color: var(--muted); font-size: .8rem; }
+    .schedule-color-options { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 9px; }
+    .schedule-color-option { position: relative; min-width: 0; cursor: pointer; }
+    .schedule-color-option input { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+    .schedule-color-option-content {
+      display: flex; align-items: center; gap: 8px; min-height: 48px;
+      border: 2px solid var(--schedule-border); border-radius: 12px; padding: 8px 10px;
+      background: var(--schedule-bg); color: var(--schedule-text); transition: .16s ease;
+    }
+    .schedule-color-option-content strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .schedule-color-swatch { flex: 0 0 18px; width: 18px; height: 18px; border: 2px solid rgba(255,255,255,.9); border-radius: 999px; background: var(--schedule-accent); box-shadow: 0 0 0 1px var(--schedule-border); }
+    .schedule-color-option input:checked + .schedule-color-option-content {
+      border-color: var(--schedule-accent); box-shadow: 0 0 0 2px white, 0 0 0 4px var(--schedule-accent);
+    }
+    .schedule-color-option input:focus-visible + .schedule-color-option-content { outline: 3px solid var(--schedule-accent); outline-offset: 2px; }
     .utility-actions { display: flex; flex-wrap: wrap; gap: 9px; align-items: center; }
     .danger-zone { border-color: #e1b1b1; background: #fff8f8; }
     .danger-zone h3 { color: var(--danger); }
@@ -555,6 +595,7 @@
       .student-schedule-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .individual-grid { grid-template-columns: 1fr; }
       .settings-grid, .settings-grid.three, .student-setting-grid { grid-template-columns: 1fr; }
+      .schedule-color-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .teacher-record-accordion > summary { padding: 15px 16px; }
       .teacher-record-accordion-body { padding: 15px 16px 18px; }
       .private-toolbar { align-items: stretch; }
@@ -731,6 +772,16 @@
     ];
 
     const COURSE_TYPE_OPTIONS = ['國語', '數學', '學習策略', '社會技巧', '溝通訓練', '適應體育'];
+    const SCHEDULE_COLOR_OPTIONS = [
+      { value:'green', label:'淺綠' },
+      { value:'blue', label:'淺藍' },
+      { value:'orange', label:'淺橘' },
+      { value:'purple', label:'淺紫' },
+      { value:'yellow', label:'淺黃' },
+      { value:'pink', label:'淺粉' },
+      { value:'cyan', label:'淺青' },
+      { value:'gray', label:'淺灰' }
+    ];
 
     const DEFAULT_STUDENT_ROSTER = [
       { id: 'student-6-lin', name: '6林生', password: '' },
@@ -775,6 +826,15 @@
 
     function getPeriodOption(slot) {
       return PERIOD_OPTIONS.find(option => option.value !== 'custom' && option.value === String(slot || '')) || null;
+    }
+
+    function normalizeScheduleColor(value) {
+      const requested = String(value || 'green');
+      return SCHEDULE_COLOR_OPTIONS.some(option => option.value === requested) ? requested : 'green';
+    }
+
+    function getScheduleToneClass(entry) {
+      return `schedule-tone-${normalizeScheduleColor(entry && entry.color)}`;
     }
 
     function isCombinedThirdFourthSlot(slot) {
@@ -857,7 +917,7 @@
 
     function createDefaultAppConfig() {
       return {
-        version: 5,
+        version: 6,
         updatedAt: '',
         terms: [{ id:'115-1', schoolYear:115, semester:1, startDate:DEFAULT_TERM_START, weekCount:DEFAULT_TERM_WEEK_COUNT }],
         students: DEFAULT_STUDENT_ROSTER.map(student => ({ ...student, active:true })),
@@ -926,6 +986,7 @@
           groupId: groupId || (customGroup ? 'custom' : ''),
           customGroup,
           scope,
+          color: normalizeScheduleColor(raw.color),
           students: uniqueValues(Array.isArray(raw.students) ? raw.students : []),
           _fromCombined: fromCombined
         };
@@ -1005,7 +1066,7 @@
           );
         });
       });
-      return { version:5, updatedAt:String(source.updatedAt || ''), terms, students, studentGroups, schedules };
+      return { version:6, updatedAt:String(source.updatedAt || ''), terms, students, studentGroups, schedules };
     }
 
     function loadAppConfig() {
@@ -1619,7 +1680,7 @@
           const entries = timetable.filter(item => item.day === dayIndex);
           return `<section class="timetable-day"><h3>${weekdayName(dayIndex)}</h3>
             ${entries.length ? entries.map(entry => `
-              <button class="schedule-entry ${entry.id === state.selectedScheduleId ? 'active' : ''}" type="button" data-schedule-id="${escapeAttr(entry.id)}">
+              <button class="schedule-entry ${getScheduleToneClass(entry)} ${entry.id === state.selectedScheduleId ? 'active' : ''}" type="button" data-schedule-id="${escapeAttr(entry.id)}">
                 <strong>${escapeHtml(entry.slot)}・${escapeHtml(getScheduleDisplayTitle(entry))}</strong>
                 <span>${escapeHtml(entry.time)}</span>
                 <span>${escapeHtml(entry.students.join('、'))}</span>
@@ -1921,6 +1982,7 @@
         groupId: '',
         customGroup: '',
         scope: 'chinese',
+        color: 'green',
         students: []
       };
     }
@@ -1960,7 +2022,7 @@
               return `<td><div class="schedule-board-cell"><div class="schedule-board-blocked"><strong>${escapeHtml(blockedLabel)}</strong><span>固定時段</span></div></div></td>`;
             }
             return `<td><div class="schedule-board-cell">${entries.length ? entries.map(entry => `
-              <button class="schedule-board-entry ${entry.id === state.settingsScheduleId ? 'active' : ''}" type="button" data-select-settings-schedule="${escapeAttr(entry.id)}">
+              <button class="schedule-board-entry ${getScheduleToneClass(entry)} ${entry.id === state.settingsScheduleId ? 'active' : ''}" type="button" data-select-settings-schedule="${escapeAttr(entry.id)}">
                 <strong>${escapeHtml(getScheduleDisplayTitle(entry, state.settingsDraft))}</strong>
                 ${(entry.students || []).length
                   ? `<span>${entry.students.length} 位學生</span><span class="schedule-student-names">${escapeHtml(entry.students.join('、'))}</span>`
@@ -1979,6 +2041,7 @@
       const courseValue = COURSE_TYPE_OPTIONS.includes(entry.courseType) ? entry.courseType : 'custom';
       const knownGroup = groups.find(group => group.id === entry.groupId);
       const groupValue = knownGroup ? knownGroup.id : (entry.groupId === 'custom' || entry.customGroup ? 'custom' : 'none');
+      const scheduleColor = normalizeScheduleColor(entry.color);
       return `<div class="schedule-editor-backdrop" data-schedule-editor-backdrop>
       <article class="schedule-editor" role="dialog" aria-modal="true" aria-labelledby="scheduleEditorTitle">
         <div class="schedule-editor-title">
@@ -1999,6 +2062,14 @@
           </select></label>
           ${groupValue === 'custom' ? `<label class="field"><span class="field-label">自訂組別名稱</span><input class="input" data-selected-schedule-field="customGroup" value="${escapeAttr(entry.customGroup)}" placeholder="例如：A 組"></label>` : ''}
         </div>
+        <fieldset class="schedule-color-field">
+          <legend class="field-label">節次底圖顏色</legend>
+          <p class="schedule-color-help">可依課程類型、組別或巡迴他校節次選色；顏色只做視覺區分。</p>
+          <div class="schedule-color-options">${SCHEDULE_COLOR_OPTIONS.map(option => `<label class="schedule-color-option schedule-tone-${escapeAttr(option.value)}">
+            <input type="radio" name="scheduleColor" value="${escapeAttr(option.value)}" data-selected-schedule-color ${option.value === scheduleColor ? 'checked' : ''}>
+            <span class="schedule-color-option-content"><span class="schedule-color-swatch" aria-hidden="true"></span><strong>${escapeHtml(option.label)}</strong></span>
+          </label>`).join('')}</div>
+        </fieldset>
         <div class="field" style="margin-top:12px">
           <span class="field-label">快速依組別加入學生</span>
           <div class="group-quick-add">${groups.length ? groups.map(group => `<button class="btn btn-soft" type="button" data-add-student-group="${escapeAttr(group.id)}">＋ ${escapeHtml(group.name)}</button>`).join('') : '<span class="format-note">請先在「學生名單與分組」建立組別。</span>'}</div>
@@ -2098,7 +2169,7 @@
         <details class="settings-accordion" data-settings-section="schedule" ${isSettingsSectionOpen('schedule') ? 'open' : ''}>
           <summary>教師課表與節次</summary>
           <div class="settings-accordion-body">
-            <p>先選擇學期與教師，再直接點課表位置。點「＋ 設定」或既有課程會開啟設定視窗；節次時間會自動帶入。</p>
+            <p>先選擇學期與教師，再直接點課表位置。點「＋ 設定」或既有課程會開啟設定視窗；節次時間會自動帶入，也可選擇底圖顏色。</p>
             <div class="settings-grid">
               <label class="field"><span class="field-label">設定學期</span><select class="select" id="settingsTermSelect">${(draft.terms || []).map(term => `<option value="${escapeAttr(term.id)}" ${term.id === state.settingsTermId ? 'selected' : ''}>${escapeHtml(termLabel(term))}</option>`).join('')}</select></label>
               <div class="field"><span class="field-label">設定教師</span><div class="segmented">${TEACHERS.map(teacher => `<button type="button" data-settings-teacher="${escapeAttr(teacher.id)}" class="${teacher.id === state.settingsTeacherId ? 'active' : ''}">${escapeHtml(teacher.name)}</button>`).join('')}</div></div>
@@ -2263,6 +2334,13 @@
         input.addEventListener('input', handler);
         input.addEventListener('change', handler);
       });
+      root.querySelectorAll('[data-selected-schedule-color]').forEach(input => input.addEventListener('change', event => {
+        const entry = getSelectedSettingsScheduleEntry();
+        if (!entry) return;
+        entry.color = normalizeScheduleColor(event.currentTarget.value);
+        markSettingsDirty();
+        renderSettingsCenter();
+      }));
       const periodSelect = document.getElementById('settingsPeriodSelect');
       if (periodSelect) periodSelect.addEventListener('change', event => {
         const entry = getSelectedSettingsScheduleEntry();
@@ -2575,7 +2653,7 @@
             <label class="toggle"><input type="checkbox" data-bool="days.${index}.enabled" ${day.enabled ? 'checked' : ''}> 本日上課</label>
           </header>
           <div class="day-body">
-            ${scheduleEntry ? `<div class="selected-class-banner"><strong>${escapeHtml(scheduleEntry.slot)}・${escapeHtml(getScheduleDisplayTitle(scheduleEntry))}</strong><span>${escapeHtml(scheduleEntry.time)}｜${escapeHtml(scheduleEntry.students.join('、'))}</span></div>` : ''}
+            ${scheduleEntry ? `<div class="selected-class-banner ${getScheduleToneClass(scheduleEntry)}"><strong>${escapeHtml(scheduleEntry.slot)}・${escapeHtml(getScheduleDisplayTitle(scheduleEntry))}</strong><span>${escapeHtml(scheduleEntry.time)}｜${escapeHtml(scheduleEntry.students.join('、'))}</span></div>` : ''}
             ${day.enabled ? renderTeacherFields(day, index, scope, teacherId, scheduleEntry) : '<div class="empty-state">本日設定為不上課。勾選「本日上課」後即可填寫。</div>'}
           </div>
         </article>`;
